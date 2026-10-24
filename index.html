@@ -337,40 +337,6 @@
       color: var(--danger);
     }
 
-    /* ============ 虚拟方向键（手机触控） ============ */
-    .dpad {
-      display: grid;
-      grid-template-columns: repeat(3, 56px);
-      grid-template-rows: repeat(3, 56px);
-      gap: 8px;
-      justify-content: center;
-      margin-top: 6px;
-      touch-action: manipulation;
-    }
-
-    .dpad button {
-      border: 1px solid var(--panel-border);
-      background: var(--panel);
-      border-radius: 14px;
-      color: var(--text-0);
-      font-size: 22px;
-      font-weight: 700;
-      cursor: pointer;
-      -webkit-user-select: none;
-      user-select: none;
-      transition: background 0.1s ease, transform 0.05s ease;
-    }
-
-    .dpad button:active {
-      background: rgba(74, 222, 128, 0.18);
-      transform: scale(0.96);
-    }
-
-    .dpad .up { grid-area: 1 / 2; }
-    .dpad .left { grid-area: 2 / 1; }
-    .dpad .right { grid-area: 2 / 3; }
-    .dpad .down { grid-area: 3 / 2; }
-
     /* ============ 排行榜 ============ */
     .leaderboard {
       width: 100%;
@@ -485,7 +451,7 @@
       <!-- 开始 / 准备 覆盖层 -->
       <div class="overlay" id="overlay-ready">
         <h2>准备开始</h2>
-        <p>使用 <b>方向键</b> 或 <b>WASD</b> 控制移动<br>手机可滑动或用下方方向键转向<br><b>共 5 关，逐关加难</b></p>
+        <p>使用 <b>方向键</b> 或 <b>WASD</b> 控制移动<br>手机可滑动屏幕转向<br><b>共 5 关，逐关加难</b></p>
         <button class="btn" id="btn-start">开始游戏</button>
         <div class="hint">空格暂停 · 回车重开</div>
       </div>
@@ -527,14 +493,6 @@
       <span class="chip">🔶 陷阱</span>
       <span class="chip">⚡ 加速</span>
       <span class="chip">🟥 移动障碍</span>
-    </div>
-
-    <!-- 虚拟方向键（手机触控转向） -->
-    <div class="dpad" id="dpad">
-      <button class="up" data-dir="up" aria-label="向上">▲</button>
-      <button class="left" data-dir="left" aria-label="向左">◀</button>
-      <button class="right" data-dir="right" aria-label="向右">▶</button>
-      <button class="down" data-dir="down" aria-label="向下">▼</button>
     </div>
   </div>
 
@@ -623,7 +581,6 @@
     const finalRankEl = document.getElementById("final-rank");
     const leaderboardEl = document.getElementById("leaderboard");
     const btnSound = document.getElementById("btn-sound");
-    const dpadEl = document.getElementById("dpad");
 
     // ---------- 游戏状态 ----------
     const STATE = { READY: "ready", PLAYING: "playing", PAUSED: "paused", OVER: "over" };
@@ -1620,18 +1577,6 @@
         initAudio();
         toggleFeedback();
       });
-
-      // 虚拟方向键（点击/触摸转向；180° 拦截由 setDirection 处理）
-      if (dpadEl) {
-        const dirMap = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
-        dpadEl.addEventListener("click", function (e) {
-          const btn = e.target.closest("button[data-dir]");
-          if (!btn) return;
-          initAudio();
-          const d = dirMap[btn.getAttribute("data-dir")];
-          if (d) setDirection(d[0], d[1]);
-        });
-      }
 
       // 触摸滑动（仅在画布上）
       canvas.addEventListener("touchstart", onTouchStart, { passive: true });
