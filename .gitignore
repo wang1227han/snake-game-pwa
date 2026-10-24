@@ -1,0 +1,9 @@
+# 只发布贪吃蛇 PWA 单文件，排除其他工程与本地配置
+wechat-snake-game/
+.workbuddy/
+__*
+*.zip
+*.md
+icon-192.png
+icon-512.png
+manifest.webmanifest
