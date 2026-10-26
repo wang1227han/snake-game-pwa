@@ -72,6 +72,19 @@
       color: #06121f; font-weight: 700; font-size: 15px;
     }
     .hint { text-align: center; color: var(--text-1); font-size: 12px; margin-top: 10px; }
+
+    .side { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .side-label { color: var(--text-1); font-size: 13px; }
+    .side button {
+      flex: 1; padding: 8px 4px; border-radius: 10px; cursor: pointer;
+      border: 1px solid var(--panel-border); background: var(--panel);
+      color: var(--text-1); font-size: 13px; font-weight: 600;
+      transition: all 0.12s ease;
+    }
+    .side button.active { background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #06121f; border-color: transparent; }
+
+    .status.scramble { color: var(--accent-2); animation: blink 0.8s infinite; }
+    @keyframes blink { 50% { opacity: 0.45; } }
   </style>
 </head>
 <body>
@@ -87,6 +100,13 @@
       <button data-level="medium" class="active">中等</button>
       <button data-level="hard">困难</button>
       <button data-level="insane">吊炸天</button>
+      <button data-level="hell">地狱</button>
+    </div>
+
+    <div class="side" id="side">
+      <span class="side-label">你执</span>
+      <button data-side="black" class="active">黑·先手</button>
+      <button data-side="white">白·后手</button>
     </div>
 
     <div class="status" id="status">你执黑先行，点击棋盘落子</div>
@@ -98,29 +118,43 @@
     <div class="footer">
       <button class="btn" id="restart">新对局</button>
     </div>
-    <div class="hint">黑棋（你）先手 · 五子连珠即胜 · 难度只在 AI 强度</div>
+    <div class="hint" id="hint">黑棋先手 · 五子连珠即胜 · 困难/吊炸天/地狱 黑棋受「禁手」限制 · 地狱每 20 手重组棋盘</div>
   </div>
 
   <script>
   (function () {
     "use strict";
     const GRID = 15;          // 15x15 棋盘
-    const EMPTY = 0, BLACK = 1, WHITE = 2; // 黑=玩家，白=AI
+    const EMPTY = 0, BLACK = 1, WHITE = 2;
     const WIN = 1e9;
 
     let board = [];           // board[r][c]
-    let current = BLACK;      // 当前轮到谁
+    let current = BLACK;      // 当前轮到谁落子（五子棋恒为黑先）
     let gameOver = false;
     let lastMove = null;      // {r,c}
     let level = "medium";
     let thinking = false;
 
+    // 执棋方：玩家与 AI 各执一色（黑恒先手）
+    let humanColor = BLACK;
+    let aiColor = WHITE;
+
+    // 地狱难度：每 20 手重组棋盘
+    let plyCount = 0;
+    let scrambling = false;
+    let scrambleStart = 0;
+    let scrambleParticles = [];
+
+    function isHardPlus(l) { return l === "hard" || l === "insane" || l === "hell"; }
+    function forbiddenActive() { return isHardPlus(level); } // 困难以上黑棋受禁手限制
+
     // ---------- 难度配置 ----------
     const LEVELS = {
-      easy:   { cap: 0 },                       // 仅随机（带明显的赢/挡）
-      medium: { cap: 0 },                       // 贪心单步评分
-      hard:   { depth: 2, cap: 14 },            // 2 层搜索
-      insane: { depth: 4, cap: 10 }             // 4 层 α-β 搜索
+      easy:   { cap: 0 },                                  // 仅随机（带明显的赢/挡）
+      medium: { cap: 0 },                                  // 贪心单步评分
+      hard:   { depth: 2, cap: 14 },                       // 2 层搜索 + 黑棋禁手
+      insane: { depth: 4, cap: 10 },                       // 4 层 α-β 搜索 + 黑棋禁手
+      hell:   { depth: 4, cap: 12, scramble: true }        // 吊炸天强度 + 每 20 手重组棋盘
     };
 
     // ---------- 工具 ----------
@@ -158,16 +192,16 @@
       return total;
     }
 
-    // 整盘评估（白棋视角）
-    function evaluate(b) {
-      let mine = 0, opp = 0;
+    // 整盘评估（me 视角）
+    function evaluate(b, me, opp) {
+      let mine = 0, other = 0;
       for (let r = 0; r < GRID; r++) {
         for (let c = 0; c < GRID; c++) {
-          if (b[r][c] === WHITE) mine += pointScore(b, r, c, WHITE);
-          else if (b[r][c] === BLACK) opp += pointScore(b, r, c, BLACK);
+          if (b[r][c] === me) mine += pointScore(b, r, c, me);
+          else if (b[r][c] === opp) other += pointScore(b, r, c, opp);
         }
       }
-      return mine - 1.15 * opp; // 略偏防守
+      return mine - 1.15 * other; // 略偏防守
     }
 
     function moveValue(b, r, c, me, opp) {
@@ -231,75 +265,141 @@
       return false;
     }
 
-    // ---------- 极小化极大 + α-β ----------
-    function minimax(b, depth, alpha, beta, player, last) {
-      if (last && checkWinAt(b, last.r, last.c, last.player === WHITE ? BLACK : WHITE)) {
-        // 上一步导致对手（last.player 的对家）获胜
-        return last.player === WHITE ? -WIN : WIN;
+    // ---------- 禁手规则（仅对黑棋生效）----------
+    // 落子为黑且未成五时调用：三三 / 四四 / 长连 即禁手（五连优先于禁手）
+    function hasFour(b, r, c, dr, dc) {
+      // 该方向是否存在「四」威胁：存在空格 k，填入黑后从 (r,c) 起连成 5
+      for (let k = -4; k <= 4; k++) {
+        if (k === 0) continue;
+        const rr = r + dr * k, cc = c + dc * k;
+        if (!inBounds(rr, cc) || b[rr][cc] !== EMPTY) continue;
+        b[rr][cc] = BLACK;
+        const win = checkWinAt(b, r, c, BLACK);
+        b[rr][cc] = EMPTY;
+        if (win) return true;
       }
-      if (depth === 0) return evaluate(b);
+      return false;
+    }
+
+    function hasOpenThree(b, r, c, dr, dc) {
+      // 活三：该方向存在 ≥2 个可成「四」的点（两端皆可做杀）
+      let count = 0;
+      for (let k = -4; k <= 4; k++) {
+        if (k === 0) continue;
+        const rr = r + dr * k, cc = c + dc * k;
+        if (!inBounds(rr, cc) || b[rr][cc] !== EMPTY) continue;
+        b[rr][cc] = BLACK;
+        const four = hasFour(b, r, c, dr, dc);
+        b[rr][cc] = EMPTY;
+        if (four) count++;
+      }
+      return count >= 2;
+    }
+
+    function isForbidden(b, r, c) {
+      const dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
+      // 长连（六子及以上）
+      for (const [dr, dc] of dirs) {
+        let cnt = 1;
+        let i = r + dr, j = c + dc;
+        while (inBounds(i, j) && b[i][j] === BLACK) { cnt++; i += dr; j += dc; }
+        i = r - dr; j = c - dc;
+        while (inBounds(i, j) && b[i][j] === BLACK) { cnt++; i -= dr; j -= dc; }
+        if (cnt >= 6) return true;
+      }
+      let fours = 0;
+      for (const [dr, dc] of dirs) if (hasFour(b, r, c, dr, dc)) fours++;
+      if (fours >= 2) return true;            // 四四禁手
+      let threes = 0;
+      for (const [dr, dc] of dirs) {
+        if (hasFour(b, r, c, dr, dc)) continue;
+        if (hasOpenThree(b, r, c, dr, dc)) threes++;
+      }
+      if (threes >= 2) return true;           // 三三禁手
+      return false;
+    }
+
+    function isForbiddenTemp(b, r, c) {
+      b[r][c] = BLACK;
+      const f = isForbidden(b, r, c);
+      b[r][c] = EMPTY;
+      return f;
+    }
+
+    // ---------- 极小化极大 + α-β ----------
+    function minimax(b, depth, alpha, beta, player, last, me, opp) {
+      if (last && checkWinAt(b, last.r, last.c, last.player)) {
+        // 上一步落子方 last.player 连成五
+        return last.player === me ? WIN : -WIN;
+      }
+      if (depth === 0) return evaluate(b, me, opp);
       const cfg = LEVELS[level];
       let cells = candidates(b, player);
       if (cfg.cap && cells.length > cfg.cap) cells = cells.slice(0, cfg.cap);
-      if (player === WHITE) {
-        let best = -WIN;
-        for (let i = 0; i < cells.length; i++) {
-          const r = cells[i][0], c = cells[i][1];
-          b[r][c] = WHITE;
-          const v = minimax(b, depth - 1, alpha, beta, BLACK, { r, c, player: WHITE });
-          b[r][c] = EMPTY;
+      const maximizing = (player === me);
+      let best = maximizing ? -WIN : WIN;
+      for (let i = 0; i < cells.length; i++) {
+        const r = cells[i][0], c = cells[i][1];
+        // 搜索中若轮到 AI 执黑，跳过禁手点
+        let forbidden = false;
+        if (player === me && me === BLACK && forbiddenActive()) {
+          b[r][c] = BLACK; forbidden = isForbidden(b, r, c); b[r][c] = EMPTY;
+        }
+        if (forbidden) continue;
+        b[r][c] = player;
+        const v = minimax(b, depth - 1, alpha, beta, (player === BLACK ? WHITE : BLACK), { r, c, player }, me, opp);
+        b[r][c] = EMPTY;
+        if (maximizing) {
           if (v > best) best = v;
           if (best > alpha) alpha = best;
-          if (beta <= alpha) break;
-        }
-        return best;
-      } else {
-        let best = WIN;
-        for (let i = 0; i < cells.length; i++) {
-          const r = cells[i][0], c = cells[i][1];
-          b[r][c] = BLACK;
-          const v = minimax(b, depth - 1, alpha, beta, WHITE, { r, c, player: BLACK });
-          b[r][c] = EMPTY;
+        } else {
           if (v < best) best = v;
           if (best < beta) beta = best;
-          if (beta <= alpha) break;
         }
-        return best;
+        if (beta <= alpha) break;
       }
+      return best;
     }
 
     // ---------- AI 落子 ----------
     function chooseAIMove() {
-      // 1) 自己能赢直接赢
-      let m = findWinningMove(board, WHITE);
+      const me = aiColor, opp = humanColor;
+      // 1) 自己能赢直接赢（五连优先，覆盖禁手）
+      let m = findWinningMove(board, me);
       if (m) return m;
-      // 2) 对手能赢必须挡
-      m = findWinningMove(board, BLACK);
-      if (m) return m;
+      // 2) 对手能赢必须挡（若对手为黑且此制胜点恰是禁手，则黑方不能下，非真实威胁）
+      m = findWinningMove(board, opp);
+      if (m) {
+        if (!(opp === BLACK && forbiddenActive() && isForbiddenTemp(board, m[0], m[1]))) return m;
+      }
 
       const cfg = LEVELS[level];
+      const cells = candidates(board, me);
+      const blackBan = (me === BLACK && forbiddenActive());
+
       if (level === "easy") {
-        const cells = candidates(board, WHITE);
-        return cells[Math.floor(Math.random() * cells.length)];
+        let safe = blackBan ? cells.filter(([r, c]) => !isForbiddenTemp(board, r, c)) : cells;
+        if (safe.length === 0) safe = cells;
+        return safe[Math.floor(Math.random() * safe.length)];
       }
       if (level === "medium") {
-        const cells = candidates(board, WHITE);
         let best = null, bestV = -Infinity;
         for (let i = 0; i < cells.length; i++) {
           const r = cells[i][0], c = cells[i][1];
-          const v = moveValue(board, r, c, WHITE, BLACK);
+          if (blackBan && isForbiddenTemp(board, r, c)) continue;
+          const v = moveValue(board, r, c, me, opp);
           if (v > bestV) { bestV = v; best = [r, c]; }
         }
         return best;
       }
-      // hard / insane：搜索
-      const cells = candidates(board, WHITE);
+      // hard / insane / hell：搜索
       const capped = cfg.cap && cells.length > cfg.cap ? cells.slice(0, cfg.cap) : cells;
       let best = capped[0], bestV = -WIN;
       for (let i = 0; i < capped.length; i++) {
         const r = capped[i][0], c = capped[i][1];
-        board[r][c] = WHITE;
-        const v = minimax(board, cfg.depth - 1, -WIN, WIN, BLACK, { r, c, player: WHITE });
+        if (blackBan && isForbiddenTemp(board, r, c)) continue;
+        board[r][c] = me;
+        const v = minimax(board, cfg.depth - 1, -WIN, WIN, opp, { r, c, player: me }, me, opp);
         board[r][c] = EMPTY;
         if (v > bestV) { bestV = v; best = [r, c]; }
       }
@@ -328,6 +428,22 @@
     function draw() {
       const size = canvas.width / dpr;
       ctx.clearRect(0, 0, size, size);
+      ctx.save();
+      // 重组时棋盘轻微脉冲缩放，强化“重新洗牌”的视觉
+      if (scrambleActive()) {
+        const prog = (Date.now() - scrambleStart) / 5000;
+        const pulse = 1 + 0.05 * Math.sin(prog * Math.PI * 4);
+        ctx.translate(size / 2, size / 2);
+        ctx.scale(pulse, pulse);
+        ctx.translate(-size / 2, -size / 2);
+      }
+      drawBoardContents();
+      ctx.restore();
+      if (scrambleActive()) drawScrambleParticles();
+    }
+
+    function drawBoardContents() {
+      const size = canvas.width / dpr;
       // 网格
       ctx.strokeStyle = "rgba(60,40,20,0.55)";
       ctx.lineWidth = 1;
@@ -362,6 +478,43 @@
       }
     }
 
+    function scrambleActive() {
+      return scrambling && (Date.now() - scrambleStart) < 5000;
+    }
+
+    // 旋转粒子特效：旋转光环 + 黑白棋子粒子环（持续 5 秒，末段淡出）
+    function drawScrambleParticles() {
+      const size = canvas.width / dpr;
+      const cx = size / 2, cy = size / 2;
+      const t = Date.now() - scrambleStart;
+      const prog = Math.max(0, Math.min(1, t / 5000));
+      const alpha = prog < 0.8 ? 1 : (1 - (prog - 0.8) / 0.2);
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.9;
+      const ringR = Math.min(cx, cy) * 0.62;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(34,211,238,0.65)";
+      ctx.beginPath(); ctx.arc(cx, cy, ringR, t / 600, t / 600 + Math.PI * 1.4); ctx.stroke();
+      ctx.strokeStyle = "rgba(74,222,128,0.55)";
+      ctx.beginPath(); ctx.arc(cx, cy, ringR * 0.8, -t / 500, -t / 500 + Math.PI * 1.2); ctx.stroke();
+      for (const p of scrambleParticles) {
+        const a = p.ang + (t / 1000) * p.spd;
+        const x = cx + p.r * Math.cos(a), y = cy + p.r * Math.sin(a);
+        ctx.beginPath();
+        ctx.fillStyle = p.col;
+        if (p.glow) { ctx.shadowColor = p.col; ctx.shadowBlur = 8; }
+        else { ctx.shadowBlur = 0; }
+        ctx.arc(x, y, p.size, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+
+    function animateScramble() {
+      draw();
+      if (scrambleActive()) requestAnimationFrame(animateScramble);
+    }
+
     // ---------- 交互 ----------
     const statusEl = document.getElementById("status");
 
@@ -371,27 +524,168 @@
     }
 
     function humanPlace(r, c) {
-      if (gameOver || thinking || current !== BLACK || board[r][c] !== EMPTY) return;
-      board[r][c] = BLACK; lastMove = { r, c };
+      if (gameOver || thinking || scrambling || current !== humanColor || board[r][c] !== EMPTY) return;
+      // 玩家执黑且当前启用禁手：先判定（五连优先于禁手）
+      if (humanColor === BLACK && forbiddenActive()) {
+        board[r][c] = BLACK;
+        const win = checkWinAt(board, r, c, BLACK);
+        const fb = isForbidden(board, r, c);
+        board[r][c] = EMPTY;
+        if (win) { board[r][c] = BLACK; lastMove = { r, c }; draw(); endGame(true); return; }
+        if (fb) { board[r][c] = BLACK; lastMove = { r, c }; draw(); endGame(false, "禁手判负"); return; }
+      }
+      board[r][c] = humanColor; lastMove = { r, c };
       draw();
-      if (checkWinAt(board, r, c, BLACK)) { endGame(true); return; }
+      if (checkWinAt(board, r, c, humanColor)) { endGame(true); return; }
       if (isBoardFull()) { endGame(null); return; }
-      current = WHITE;
-      setStatus("AI 思考中…");
-      thinking = true;
-      setTimeout(aiTurn, 30);
+      current = aiColor;
+      finishMove();
     }
 
     function aiTurn() {
       const m = chooseAIMove();
       thinking = false;
       if (!m) { endGame(null); return; }
-      board[m[0]][m[1]] = WHITE; lastMove = { r: m[0], c: m[1] };
+      board[m[0]][m[1]] = aiColor; lastMove = { r: m[0], c: m[1] };
       draw();
-      if (checkWinAt(board, m[0], m[1], WHITE)) { endGame(false); return; }
+      if (checkWinAt(board, m[0], m[1], aiColor)) { endGame(false); return; }
       if (isBoardFull()) { endGame(null); return; }
-      current = BLACK;
-      setStatus("轮到你了（黑棋）");
+      current = humanColor;
+      finishMove();
+    }
+
+    // 一手结束后：计手数，地狱难度每 20 手重组棋盘，否则切换行棋方
+    function finishMove() {
+      plyCount++;
+      if (level === "hell" && plyCount > 0 && plyCount % 20 === 0 && !gameOver) {
+        startScramble();
+        return;
+      }
+      switchTurn();
+    }
+
+    function switchTurn() {
+      if (current === aiColor) {
+        setStatus("AI 思考中…");
+        thinking = true;
+        setTimeout(aiTurn, 30);
+      } else {
+        thinking = false;
+        setStatus(current === BLACK ? "轮到你了（黑棋）" : "轮到你了（白棋）");
+      }
+    }
+
+    // ---------- 棋盘重组（地狱难度）----------
+    function emptyBoard() {
+      const b = [];
+      for (let i = 0; i < GRID; i++) b.push(new Array(GRID).fill(EMPTY));
+      return b;
+    }
+    function shuffle(a) {
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = a[i]; a[i] = a[j]; a[j] = t;
+      }
+      return a;
+    }
+    function countColor(color) {
+      let n = 0;
+      for (let r = 0; r < GRID; r++)
+        for (let c = 0; c < GRID; c++)
+          if (board[r][c] === color) n++;
+      return n;
+    }
+    // 某色是否存在“下一手即连五”的制胜点（用于重组后校验）
+    function hasImmediateWin(b, color) {
+      const seen = new Set();
+      for (let r = 0; r < GRID; r++)
+        for (let c = 0; c < GRID; c++) {
+          if (b[r][c] !== color) continue;
+          for (let dr = -1; dr <= 1; dr++)
+            for (let dc = -1; dc <= 1; dc++) {
+              const nr = r + dr, nc = c + dc;
+              if (!inBounds(nr, nc) || b[nr][nc] !== EMPTY) continue;
+              const key = nr * GRID + nc;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              b[nr][nc] = color;
+              const w = checkWinAt(b, nr, nc, color);
+              b[nr][nc] = EMPTY;
+              if (w) return true;
+            }
+        }
+      return false;
+    }
+    // 重组后的合法性：无五连（已分胜负）、且无任一方“下一手即胜”
+    function validateScramble(b) {
+      for (let r = 0; r < GRID; r++)
+        for (let c = 0; c < GRID; c++)
+          if (b[r][c] !== EMPTY && checkWinAt(b, r, c, b[r][c])) return false;
+      if (hasImmediateWin(b, BLACK)) return false;
+      if (hasImmediateWin(b, WHITE)) return false;
+      return true;
+    }
+    function safePlaceNoWin(nb, nw) {
+      const all = [];
+      for (let r = 0; r < GRID; r++) for (let c = 0; c < GRID; c++) all.push([r, c]);
+      for (let attempt = 0; attempt < 400; attempt++) {
+        const b = emptyBoard();
+        const cells = shuffle(all.slice());
+        let bi = 0, wi = 0;
+        for (const [r, c] of cells) {
+          if (bi < nb) { b[r][c] = BLACK; if (validateScramble(b)) bi++; else b[r][c] = EMPTY; }
+          else if (wi < nw) { b[r][c] = WHITE; if (validateScramble(b)) wi++; else b[r][c] = EMPTY; }
+          if (bi === nb && wi === nw) return b;
+        }
+      }
+      return emptyBoard();
+    }
+    // 随机打乱现有棋子分布（保持双方数量），并保证不出现直接胜负
+    function makeScrambledBoard() {
+      const nb = countColor(BLACK), nw = countColor(WHITE), total = nb + nw;
+      if (total === 0) return emptyBoard();
+      const all = [];
+      for (let r = 0; r < GRID; r++) for (let c = 0; c < GRID; c++) all.push([r, c]);
+      for (let attempt = 0; attempt < 2500; attempt++) {
+        const b = emptyBoard();
+        const chosen = shuffle(all.slice()).slice(0, total);
+        const cols = [];
+        for (let i = 0; i < nb; i++) cols.push(BLACK);
+        for (let i = 0; i < nw; i++) cols.push(WHITE);
+        shuffle(cols);
+        for (let i = 0; i < chosen.length; i++) b[chosen[i][0]][chosen[i][1]] = cols[i];
+        if (validateScramble(b)) return b;
+      }
+      return safePlaceNoWin(nb, nw);
+    }
+    function startScramble() {
+      board = makeScrambledBoard();
+      lastMove = null;
+      scrambling = true;
+      scrambleStart = Date.now();
+      // 生成旋转粒子（黑白棋子环绕）
+      scrambleParticles = [];
+      const size = canvas.width / dpr;
+      const cx = size / 2, cy = size / 2;
+      const maxR = Math.min(cx, cy) * 0.95;
+      for (let i = 0; i < 80; i++) {
+        scrambleParticles.push({
+          r: 28 + Math.random() * maxR,
+          ang: Math.random() * Math.PI * 2,
+          spd: (0.6 + Math.random() * 2.6) * (Math.random() < 0.5 ? -1 : 1),
+          size: 2 + Math.random() * 4,
+          col: Math.random() < 0.5 ? "#0b0b0b" : "#ffffff",
+          glow: Math.random() < 0.5
+        });
+      }
+      setStatus("⚡ 棋盘重组！", "scramble");
+      draw();
+      animateScramble();
+      setTimeout(function () {
+        scrambling = false;
+        draw();
+        switchTurn();
+      }, 5000);
     }
 
     function isBoardFull() {
@@ -401,10 +695,10 @@
       return true;
     }
 
-    function endGame(win) {
+    function endGame(win, reason) {
       gameOver = true;
       if (win === true) setStatus("🎉 你赢了！", "win");
-      else if (win === false) setStatus("😖 你输了，再战一局？", "lose");
+      else if (win === false) setStatus(reason ? ("😖 你输了：" + reason) : "😖 你输了，再战一局？", "lose");
       else setStatus("🤝 平局", "");
     }
 
@@ -440,13 +734,33 @@
       if (inBounds(r, c)) humanPlace(r, c);
     }, { passive: false });
 
-    // ---------- 难度与重开 ----------
+    // ---------- 难度 / 执棋方 / 重开 ----------
     const diffEl = document.getElementById("diff");
+    const sideEl = document.getElementById("side");
+
+    function setHumanSide(side) {
+      humanColor = side;
+      aiColor = (side === BLACK) ? WHITE : BLACK;
+      [...sideEl.children].forEach(b => {
+        if (b.hasAttribute("data-side"))
+          b.classList.toggle("active", b.getAttribute("data-side") === (side === BLACK ? "black" : "white"));
+      });
+    }
+
     diffEl.addEventListener("click", function (e) {
       const btn = e.target.closest("button[data-level]");
       if (!btn) return;
       level = btn.getAttribute("data-level");
       [...diffEl.children].forEach(b => b.classList.toggle("active", b === btn));
+      // 困难以上默认 AI 执黑（玩家执白），其余默认玩家执黑；玩家可手动改回
+      setHumanSide(isHardPlus(level) ? WHITE : BLACK);
+      newGame();
+    });
+
+    sideEl.addEventListener("click", function (e) {
+      const btn = e.target.closest("button[data-side]");
+      if (!btn) return;
+      setHumanSide(btn.getAttribute("data-side") === "black" ? BLACK : WHITE);
       newGame();
     });
 
@@ -456,9 +770,19 @@
     function newGame() {
       board = [];
       for (let i = 0; i < GRID; i++) { board.push(new Array(GRID).fill(EMPTY)); }
-      current = BLACK; gameOver = false; thinking = false; lastMove = null;
-      setStatus("你执黑先行，点击棋盘落子");
+      current = BLACK;            // 黑棋恒先手
+      gameOver = false; thinking = false; lastMove = null;
+      plyCount = 0; scrambling = false;
       draw();
+      if (aiColor === BLACK) {
+        // AI 执黑先行
+        setStatus("AI（黑）先行，请稍候…");
+        thinking = true;
+        setTimeout(aiTurn, 300);
+      } else {
+        setStatus(humanColor === BLACK ? "你执黑先行，点击棋盘落子" : "你执白后手，AI（黑）先行…");
+        thinking = false;
+      }
     }
 
     newGame();
