@@ -9,8 +9,8 @@
   <meta name="apple-mobile-web-app-title" content="暗棋" />
   <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%20%22%E6%9A%97%E6%A3%8B%20Banqi%22%2C%20%22short_name%22%3A%20%22%E6%9A%97%E6%A3%8B%22%2C%20%22description%22%3A%20%22%E4%B8%AD%E5%9B%BD%E6%9A%97%E6%A3%8B%EF%BC%88%E7%9B%B2%E6%A3%8B%EF%BC%89%E5%8F%8C%E4%BA%BA%E7%83%AD%E5%BA%A7%22%2C%20%22start_url%22%3A%20%22.%22%2C%20%22display%22%3A%20%22standalone%22%2C%20%22background_color%22%3A%20%22%230b1020%22%2C%20%22theme_color%22%3A%20%22%230b1020%22%2C%20%22icons%22%3A%20%5B%7B%22src%22%3A%20%22data%3Aimage/svg%2Bxml%2C%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27192%27%20height%3D%27192%27%3E%3Crect%20width%3D%27192%27%20height%3D%27192%27%20rx%3D%2740%27%20fill%3D%27%230b1020%27/%3E%3Ctext%20x%3D%2796%27%20y%3D%27128%27%20font-size%3D%27110%27%20text-anchor%3D%27middle%27%20fill%3D%27%234ade80%27%20font-family%3D%27sans-serif%27%3E%E6%A3%8B%3C/text%3E%3C/svg%3E%22%2C%20%22sizes%22%3A%20%22192x192%22%2C%20%22type%22%3A%20%22image/svg%2Bxml%22%7D%5D%7D" />
   <title>暗棋 · Banqi</title>
-  <!-- 云服务 SDK（CDN 形态，无构建步骤） -->
-  <script src="https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js"></script>
+  <!-- 云服务 SDK（本地内置，避免外网 CDN 被拦截导致「SDK 未加载」）；若本地文件缺失会回退到 CDN -->
+  <script src="workbuddy-cloud-sdk.js" onerror="window.__wcsCdnFallback=true"></script>
   <style>
     :root {
       --bg-0: #0b1020;
@@ -583,6 +583,17 @@
         }
         return true;
       }
+      // 确保 SDK 就绪：本地文件优先，缺失时回退到 CDN（仍需联网）
+      function ensureCloud() {
+        if (typeof WorkBuddyCloud !== "undefined") { initCloud(); return Promise.resolve(true); }
+        return new Promise(function (resolve) {
+          var s = document.createElement("script");
+          s.src = "https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js";
+          s.onload = function () { initCloud(); resolve(typeof WorkBuddyCloud !== "undefined"); };
+          s.onerror = function () { resolve(false); };
+          document.head.appendChild(s);
+        });
+      }
       function getMyToken() {
         let t = sessionStorage.getItem("anqi_token");
         if (!t) { t = Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem("anqi_token", t); }
@@ -618,13 +629,17 @@
       }
       function hideShare() { shareBox.style.display = "none"; }
 
-      async function createRoom() {
+      async       function createRoom() {
         myToken = getMyToken(); roomCode = genCode();
         board = makeInitialBoard();
         const state = serializeState(board, RED, "waiting", 0);
         const { error } = await cloud.database.from("anqi_rooms")
           .insert({ code: roomCode, state, red: myToken, black: null }).select();
-        if (error) { startNote.textContent = "创建房间失败：" + (error.message || error.code); return; }
+        if (error) {
+          const msg = (error.message || error.code || "网络/权限错误");
+          startNote.textContent = "创建房间失败：" + msg + "（若提示来源/权限被拒，请通过本应用的发布地址打开本页，而非 GitHub Pages 直链）";
+          return;
+        }
         myColor = RED; roomStatus = "waiting"; assigned = true;
         toMove = RED; gameOver = false; winner = null; selected = null; lastMove = null; particles = [];
         history.replaceState(null, "", "?room=" + roomCode);
@@ -702,10 +717,15 @@
       }
 
       function startOnline() {
-        if (!initCloud()) { startNote.textContent = "⚠️ 云服务 SDK 未加载，请刷新页面后重试。"; return; }
-        const rc = new URLSearchParams(location.search).get("room");
-        if (rc && !roomCode) joinRoom(rc.trim().toUpperCase());
-        else createRoom();
+        ensureCloud().then(function (ok) {
+          if (!ok) {
+            startNote.textContent = "⚠️ 云服务 SDK 未能加载（本地文件与 CDN 均失败）。请确认 workbuddy-cloud-sdk.js 与本页在同一目录，或联网后刷新重试。";
+            return;
+          }
+          const rc = new URLSearchParams(location.search).get("room");
+          if (rc && !roomCode) joinRoom(rc.trim().toUpperCase());
+          else createRoom();
+        });
       }
 
       // ====================== 本地模式 / 返回 ======================
