@@ -631,6 +631,11 @@
     let pauseStart = 0;       // 暂停起始时间（用于暂停期间补偿计时）
     let toastTimer = null;    // 关卡提示 toast 的定时器
 
+    // 粒子 / 飘字（吃食、加速、死亡、过关的视觉反馈）
+    let particles = [];       // {x,y,vx,vy,life,maxLife,size,color,grav,confetti,rot,vr}
+    let popups = [];          // {x,y,text,life,maxLife}
+    let lastDrawTime = 0;     // 上一帧时间（驱动粒子/飘字动画）
+
     // ---------- 反馈（音效 + 震动）状态 ----------
     let feedbackOn = true;     // 反馈总开关（音效 + 震动）
     let audioCtx = null;       // WebAudio 上下文
@@ -987,6 +992,8 @@
       moveInterval = LEVELS[0].baseSpeed;  // 新游戏基础速度 = L1 基础速度
       boostUntil = 0;
       boost = null;
+      particles = [];     // 清空上一局的粒子 / 彩带
+      popups = [];       // 清空飘字
       resetSnakeToCenter();
       buildLevelData();   // 生成该关障碍/陷阱/移动障碍
       spawnFood();
@@ -1112,6 +1119,11 @@
         nextLevel();
         sfxLevelUp();
         vibrate(false);
+        // 过关庆祝：蛇头处迸发绿色粒子
+        if (snake.length) {
+          const h = snake[0];
+          spawnBurst(h.x * cellPx() + cellPx() / 2, h.y * cellPx() + cellPx() / 2, COLORS.head, 18, 3.8);
+        }
         showToast("⭐ 第 " + level + " 关");
       } else {
         // 已通关：保持关卡不变，继续无限挑战（levelFoodEaten 归零继续计数）
@@ -1186,6 +1198,12 @@
       setState(STATE.OVER);
       sfxDie();
       vibrate(true);
+      // 死亡：蛇头处迸发红色粒子 + 满屏彩带
+      if (snake.length) {
+        const h = snake[0];
+        spawnBurst(h.x * cellPx() + cellPx() / 2, h.y * cellPx() + cellPx() / 2, COLORS.food, 26, 4.2);
+      }
+      spawnConfetti();
       saveBest(best);   // best 已是历史最高（含当局破纪录）的最大值，无条件持久化
       recordScore(score, level);
       finalScoreEl.textContent = String(score);
@@ -1316,6 +1334,9 @@
         sfxEat();
         vibrate(false);
         updateScoreUI();
+        // 吃食粒子迸发 + 分数飘字
+        spawnBurst(newHead.x * cellPx() + cellPx() / 2, newHead.y * cellPx() + cellPx() / 2, COLORS.food, 12, 3.2);
+        spawnPopup(newHead.x, newHead.y, "+" + POINTS_PER_FOOD);
         // 提速：达到上限后不再加快（永久改基础速度 moveInterval）
         if (moveInterval > SPEED_MIN) {
           moveInterval = Math.max(SPEED_MIN, moveInterval - SPEED_STEP);
@@ -1334,6 +1355,8 @@
         sfxBoost();
         vibrate(false);
         updateScoreUI();
+        spawnBurst(newHead.x * cellPx() + cellPx() / 2, newHead.y * cellPx() + cellPx() / 2, COLORS.boost, 14, 3.6);
+        spawnPopup(newHead.x, newHead.y, "+" + BOOST_POINTS);
         boostUntil = performance.now() + BOOST_DURATION;
         boost = null;
         spawnBoost();
@@ -1353,6 +1376,11 @@
 
     // ---------- 渲染 ----------
     function draw() {
+      const now = performance.now();
+      let dt = now - lastDrawTime;
+      lastDrawTime = now;
+      if (dt > 60) dt = 60; if (dt < 0) dt = 0;
+
       const cs = cellPx();
 
       // 背景
@@ -1388,6 +1416,10 @@
 
       // 蛇（最上层）
       drawSnake(cs);
+
+      // 粒子 / 飘字（覆盖在最上方）
+      updateAndDrawParticles(dt);
+      updateAndDrawPopups(dt);
     }
 
     function drawFood(cs) {
@@ -1561,6 +1593,85 @@
       ctx.arcTo(x, y + h, x, y, r);
       ctx.arcTo(x, y, x + w, y, r);
       ctx.closePath();
+    }
+
+    // ---------- 粒子 / 飘字特效 ----------
+    /** 在像素坐标 (cx,cy) 处迸发 count 个粒子 */
+    function spawnBurst(cx, cy, color, count, speed) {
+      for (let i = 0; i < count; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = speed * (0.4 + Math.random() * 0.6);
+        particles.push({
+          x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          life: 0, maxLife: 420 + Math.random() * 380, size: 2 + Math.random() * 3,
+          color: color, grav: 0.02, confetti: false, rot: 0, vr: 0
+        });
+      }
+    }
+
+    /** 满屏彩带（死亡 / 过关庆祝） */
+    function spawnConfetti() {
+      const W = cssSize, H = cssSize;
+      const colors = ["#4ade80", "#22d3ee", "#fbbf24", "#f87171", "#ffffff"];
+      for (let i = 0; i < 140; i++) {
+        particles.push({
+          x: Math.random() * W, y: -20 - Math.random() * H * 0.4,
+          vx: (Math.random() - 0.5) * 4, vy: 2 + Math.random() * 4,
+          life: 0, maxLife: 2200 + Math.random() * 800,
+          size: 4 + Math.random() * 5, color: colors[Math.floor(Math.random() * colors.length)],
+          grav: 0.05, confetti: true,
+          rot: Math.random() * Math.PI * 2, vr: (Math.random() - 0.5) * 0.3
+        });
+      }
+    }
+
+    /** 在格子 (gx,gy) 处生成飘字（如 +10） */
+    function spawnPopup(gx, gy, text) {
+      const cs = cellPx();
+      popups.push({ x: gx * cs + cs / 2, y: gy * cs + cs / 2, text: text, life: 0, maxLife: 720 });
+    }
+
+    /** 更新并渲染粒子（dt 为毫秒） */
+    function updateAndDrawParticles(dt) {
+      const s = dt / 16.67; // 归一化到 60fps 步长
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.life += dt;
+        if (p.life >= p.maxLife) { particles.splice(i, 1); continue; }
+        p.x += p.vx * s; p.y += p.vy * s; p.vy += p.grav * s;
+        if (p.confetti) p.rot += p.vr * s;
+        const alpha = 1 - p.life / p.maxLife;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, alpha);
+        ctx.fillStyle = p.color;
+        if (p.confetti) {
+          ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+        } else {
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+
+    /** 更新并渲染飘字 */
+    function updateAndDrawPopups(dt) {
+      for (let i = popups.length - 1; i >= 0; i--) {
+        const p = popups[i];
+        p.life += dt;
+        if (p.life >= p.maxLife) { popups.splice(i, 1); continue; }
+        const t = p.life / p.maxLife;
+        const alpha = 1 - t;
+        const yoff = -22 * t;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, alpha);
+        ctx.fillStyle = "#fbbf24";
+        ctx.font = "bold " + Math.round(cellPx() * 0.62) + "px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(p.text, p.x, p.y + yoff);
+        ctx.restore();
+      }
     }
 
     // ---------- 主循环 ----------

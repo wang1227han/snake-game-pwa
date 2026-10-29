@@ -39,6 +39,14 @@
       color: var(--text-1); font-size: 13px; text-decoration: none;
     }
     .back-link:hover { color: var(--text-0); }
+    .sound-toggle {
+      width: 38px; height: 38px; border-radius: 10px; cursor: pointer;
+      border: 1px solid var(--panel-border); background: var(--panel);
+      color: var(--text-0); font-size: 18px; line-height: 1;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: all .12s ease;
+    }
+    .sound-toggle:hover { color: var(--accent); border-color: rgba(255,255,255,0.18); }
     .title { display: flex; align-items: baseline; gap: 8px; }
     .title h1 { font-size: 20px; font-weight: 700;
       background: linear-gradient(90deg, var(--accent), var(--accent-2));
@@ -64,6 +72,7 @@
     .board-wrap { position: relative; width: 100%; aspect-ratio: 1 / 1; }
     canvas { width: 100%; height: 100%; border-radius: 14px; display: block;
       background: #d9b27c; box-shadow: 0 10px 30px rgba(0,0,0,0.35); touch-action: none; }
+    #fx { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 14px; pointer-events: none; }
 
     .footer { display: flex; justify-content: center; margin-top: 12px; }
     .btn {
@@ -92,7 +101,7 @@
     <div class="header">
       <a class="back-link" href="index.html">← 大厅</a>
       <div class="title"><h1>五子棋</h1><span class="sub">GOMOKU</span></div>
-      <span style="width:54px"></span>
+      <button class="sound-toggle" id="btn-sound" title="音效开关">🔊</button>
     </div>
 
     <div class="diff" id="diff">
@@ -113,6 +122,7 @@
 
     <div class="board-wrap">
       <canvas id="board"></canvas>
+      <canvas id="fx"></canvas>
     </div>
 
     <div class="footer">
@@ -406,6 +416,87 @@
       return best;
     }
 
+    // ---------- 音效（WebAudio）与庆祝特效 ----------
+    let audioCtx = null, muted = false;
+    function ac() {
+      if (!audioCtx) {
+        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        catch (e) { audioCtx = null; }
+      }
+      if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+      return audioCtx;
+    }
+    function tone(freq, dur, type, vol) {
+      if (muted) return;
+      const a = ac(); if (!a) return;
+      const o = a.createOscillator(), g = a.createGain();
+      o.type = type || "sine"; o.frequency.value = freq;
+      const now = a.currentTime;
+      g.gain.setValueAtTime(vol || 0.12, now);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      o.connect(g); g.connect(a.destination);
+      o.start(now); o.stop(now + dur + 0.02);
+    }
+    function sndPlace() { tone(420, 0.08, "triangle", 0.10); }
+    function sndWin() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => tone(f, 0.18, "sine", 0.14), i * 90)); }
+    function sndLose() { [392, 330, 262].forEach((f, i) => setTimeout(() => tone(f, 0.22, "sawtooth", 0.10), i * 120)); }
+    function sndScramble() { tone(180, 0.45, "sawtooth", 0.10); }
+    function sndForbidden() { tone(150, 0.28, "square", 0.12); }
+
+    // 胜负彩带：独立覆盖层画布
+    const fxCanvas = document.getElementById("fx");
+    const fxCtx = fxCanvas.getContext("2d");
+    let fxParticles = [], fxRAF = null;
+    function resizeFx() {
+      const wrap = fxCanvas.parentElement;
+      const size = wrap.clientWidth;
+      fxCanvas.width = size * dpr; fxCanvas.height = size * dpr;
+      fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    function launchConfetti(colors) {
+      if (!fxCanvas) return;
+      const W = fxCanvas.width / dpr, H = fxCanvas.height / dpr;
+      fxParticles = [];
+      for (let i = 0; i < 130; i++) {
+        fxParticles.push({
+          x: Math.random() * W, y: -20 - Math.random() * H * 0.35,
+          vx: (Math.random() - 0.5) * 4, vy: 2 + Math.random() * 4,
+          rot: Math.random() * Math.PI * 2, vr: (Math.random() - 0.5) * 0.3,
+          size: 4 + Math.random() * 6,
+          col: colors[Math.floor(Math.random() * colors.length)]
+        });
+      }
+      if (fxRAF) cancelAnimationFrame(fxRAF);
+      fxLoop();
+    }
+    function fxLoop() {
+      const W = fxCanvas.width / dpr, H = fxCanvas.height / dpr;
+      fxCtx.clearRect(0, 0, W, H);
+      let alive = false;
+      for (const p of fxParticles) {
+        p.x += p.vx; p.y += p.vy; p.vy += 0.05; p.rot += p.vr;
+        if (p.y < H + 30) alive = true;
+        fxCtx.save();
+        fxCtx.translate(p.x, p.y); fxCtx.rotate(p.rot);
+        fxCtx.fillStyle = p.col;
+        fxCtx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+        fxCtx.restore();
+      }
+      if (alive) fxRAF = requestAnimationFrame(fxLoop);
+      else { fxParticles = []; fxCtx.clearRect(0, 0, W, H); }
+    }
+
+    // 落子悬浮预览（桌面端）
+    let hoverCell = null;
+    function hoverCellFromEvent(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const cx = evt.clientX - rect.left, cy = evt.clientY - rect.top;
+      const size = rect.width, p = size * 0.045, s = (size - p * 2) / (GRID - 1);
+      const c = Math.round((cx - p) / s), r = Math.round((cy - p) / s);
+      if (!inBounds(r, c)) return null;
+      return { r, c };
+    }
+
     // ---------- 渲染 ----------
     const canvas = document.getElementById("board");
     const ctx = canvas.getContext("2d");
@@ -420,6 +511,7 @@
       pad = size * 0.045;
       step = (size - pad * 2) / (GRID - 1);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      resizeFx();
       draw();
     }
 
@@ -476,6 +568,19 @@
         ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(px(lastMove.c), px(lastMove.r), r * 0.35, 0, Math.PI * 2); ctx.stroke();
       }
+      // 落子悬浮预览（仅轮到玩家且交叉点为空时）
+      if (hoverCell && board[hoverCell.r][hoverCell.c] === EMPTY &&
+          current === humanColor && !gameOver && !thinking && !scrambling) {
+        const x = px(hoverCell.c), y = px(hoverCell.r);
+        ctx.save();
+        ctx.globalAlpha = 0.35;
+        const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
+        if (humanColor === BLACK) { g.addColorStop(0, "#6b7280"); g.addColorStop(1, "#0b0b0b"); }
+        else { g.addColorStop(0, "#ffffff"); g.addColorStop(1, "#cbd5e1"); }
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
     }
 
     function scrambleActive() {
@@ -531,11 +636,11 @@
         const win = checkWinAt(board, r, c, BLACK);
         const fb = isForbidden(board, r, c);
         board[r][c] = EMPTY;
-        if (win) { board[r][c] = BLACK; lastMove = { r, c }; draw(); endGame(true); return; }
-        if (fb) { board[r][c] = BLACK; lastMove = { r, c }; draw(); endGame(false, "禁手判负"); return; }
+        if (win) { board[r][c] = BLACK; lastMove = { r, c }; draw(); sndPlace(); endGame(true); return; }
+        if (fb) { board[r][c] = BLACK; lastMove = { r, c }; draw(); sndForbidden(); endGame(false, "禁手判负"); return; }
       }
       board[r][c] = humanColor; lastMove = { r, c };
-      draw();
+      draw(); sndPlace();
       if (checkWinAt(board, r, c, humanColor)) { endGame(true); return; }
       if (isBoardFull()) { endGame(null); return; }
       current = aiColor;
@@ -547,7 +652,7 @@
       thinking = false;
       if (!m) { endGame(null); return; }
       board[m[0]][m[1]] = aiColor; lastMove = { r: m[0], c: m[1] };
-      draw();
+      draw(); sndPlace();
       if (checkWinAt(board, m[0], m[1], aiColor)) { endGame(false); return; }
       if (isBoardFull()) { endGame(null); return; }
       current = humanColor;
@@ -679,6 +784,7 @@
         });
       }
       setStatus("⚡ 棋盘重组！", "scramble");
+      sndScramble();
       draw();
       animateScramble();
       setTimeout(function () {
@@ -697,8 +803,8 @@
 
     function endGame(win, reason) {
       gameOver = true;
-      if (win === true) setStatus("🎉 你赢了！", "win");
-      else if (win === false) setStatus(reason ? ("😖 你输了：" + reason) : "😖 你输了，再战一局？", "lose");
+      if (win === true) { setStatus("🎉 你赢了！", "win"); sndWin(); launchConfetti(["#4ade80", "#22d3ee", "#fbbf24", "#ffffff"]); }
+      else if (win === false) { setStatus(reason ? ("😖 你输了：" + reason) : "😖 你输了，再战一局？", "lose"); sndLose(); launchConfetti(["#f87171", "#fbbf24", "#ffffff"]); }
       else setStatus("🤝 平局", "");
     }
 
@@ -724,6 +830,16 @@
     }
 
     canvas.addEventListener("click", onTap);
+    canvas.addEventListener("mousemove", function (e) {
+      const cell = hoverCellFromEvent(e);
+      const changed = (cell && (!hoverCell || hoverCell.r !== cell.r || hoverCell.c !== cell.c)) ||
+                      (!cell && hoverCell);
+      hoverCell = cell;
+      if (changed) draw();
+    });
+    canvas.addEventListener("mouseleave", function () {
+      if (hoverCell) { hoverCell = null; draw(); }
+    });
     canvas.addEventListener("touchstart", function (e) {
       e.preventDefault();
       const t = e.touches[0];
@@ -733,6 +849,14 @@
       const c = Math.round((cx - p) / s), r = Math.round((cy - p) / s);
       if (inBounds(r, c)) humanPlace(r, c);
     }, { passive: false });
+
+    // 音效开关
+    const btnSound = document.getElementById("btn-sound");
+    btnSound.addEventListener("click", function () {
+      muted = !muted;
+      btnSound.textContent = muted ? "🔇" : "🔊";
+      if (!muted) { ac(); }
+    });
 
     // ---------- 难度 / 执棋方 / 重开 ----------
     const diffEl = document.getElementById("diff");
