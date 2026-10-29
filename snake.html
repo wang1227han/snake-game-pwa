@@ -432,6 +432,41 @@
       text-align: center;
       padding: 8px;
     }
+
+    /* ===== 胜负结果弹窗 ===== */
+    .modal-backdrop {
+      position: fixed; inset: 0; z-index: 50; display: none;
+      align-items: center; justify-content: center;
+      background: rgba(4, 10, 22, 0.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      padding: 20px;
+    }
+    .modal-backdrop.show { display: flex; animation: fadeBg .2s ease; }
+    @keyframes fadeBg { from { opacity: 0; } to { opacity: 1; } }
+    .modal-card {
+      width: 100%; max-width: 340px; text-align: center; padding: 26px 22px 22px;
+      border-radius: 20px; border: 1px solid var(--panel-border);
+      background: linear-gradient(160deg, rgba(34,211,238,0.16), rgba(74,222,128,0.12)), var(--panel);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+      transform: translateY(14px) scale(0.92); opacity: 0;
+      max-height: 90vh; overflow-y: auto;
+    }
+    .modal-backdrop.show .modal-card { animation: popCard .32s cubic-bezier(.2,.9,.3,1.3) forwards; }
+    @keyframes popCard { to { transform: translateY(0) scale(1); opacity: 1; } }
+    .result-emoji { font-size: 56px; line-height: 1; margin-bottom: 8px; }
+    .result-title { font-size: 24px; font-weight: 800; margin-bottom: 6px; }
+    .result-title.win { color: var(--accent); }
+    .result-title.lose { color: var(--danger); }
+    .result-title.draw { color: var(--accent-2); }
+    .result-msg { font-size: 14px; color: var(--text-1); margin-bottom: 14px; line-height: 1.6; }
+    .modal-card .leaderboard { margin: 0 auto 16px; }
+    .modal-actions { display: flex; gap: 10px; }
+    .modal-actions a, .modal-actions button {
+      flex: 1; padding: 11px 8px; border-radius: 12px; cursor: pointer; font-size: 15px; font-weight: 700;
+      text-align: center; text-decoration: none; border: 1px solid transparent; transition: transform .12s ease, filter .12s ease;
+    }
+    .modal-actions .btn-primary { background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #06121f; }
+    .modal-actions .btn-ghost { background: var(--panel); color: var(--text-0); border: 1px solid var(--panel-border) !important; }
+    .modal-actions .btn-primary:active, .modal-actions .btn-ghost:active { transform: scale(0.97); filter: brightness(1.05); }
   </style>
 </head>
 <body>
@@ -485,18 +520,6 @@
         <button class="btn" id="btn-resume">继续</button>
       </div>
 
-      <!-- 结束 覆盖层 -->
-      <div class="overlay hidden" id="overlay-over">
-        <h2 class="over">游戏结束</h2>
-        <div class="big-score" id="final-score">0</div>
-        <div class="best-line" id="final-best">历史最高：0</div>
-        <div class="best-line" id="final-level">到达第 1 关</div>
-        <div class="best-line" id="final-rank"></div>
-        <!-- 本机排行榜 -->
-        <div class="leaderboard" id="leaderboard"></div>
-        <button class="btn" id="btn-restart">重新开始</button>
-        <div class="hint">或按 <b>回车</b> 重开</div>
-      </div>
     </div>
 
     <!-- 关卡信息 + 加速提示 -->
@@ -583,24 +606,49 @@
     const ctx = canvas.getContext("2d");
     const scoreEl = document.getElementById("score");
     const bestEl = document.getElementById("best");
-    const finalScoreEl = document.getElementById("final-score");
-    const finalBestEl = document.getElementById("final-best");
-
     const overlayReady = document.getElementById("overlay-ready");
     const overlayPause = document.getElementById("overlay-pause");
-    const overlayOver = document.getElementById("overlay-over");
 
     const btnStart = document.getElementById("btn-start");
     const btnResume = document.getElementById("btn-resume");
-    const btnRestart = document.getElementById("btn-restart");
 
     // 新增 UI 引用
     const levelEl = document.getElementById("level");
     const progressEl = document.getElementById("level-progress");
     const boostHintEl = document.getElementById("boost-hint");
     const toastEl = document.getElementById("toast");
-    const finalLevelEl = document.getElementById("final-level");
-    const finalRankEl = document.getElementById("final-rank");
+
+    // ===== 胜负结果弹窗 =====
+    const resultModal = document.getElementById("resultModal");
+    const resultEmojiEl = document.getElementById("resultEmoji");
+    const resultTitleEl = document.getElementById("resultTitle");
+    const resultMsgEl = document.getElementById("resultMsg");
+    const resultLeaderboardEl = document.getElementById("resultLeaderboard");
+    const btnContinue = document.getElementById("btnContinue");
+
+    function hideResultModal() {
+      if (resultModal) resultModal.classList.remove("show");
+    }
+    function showResultModal(win, reason) {
+      if (!resultModal) return;
+      if (win === true) {
+        resultEmojiEl.textContent = "🎉";
+        resultTitleEl.textContent = "通关啦！";
+        resultTitleEl.className = "result-title win";
+      } else if (win === false) {
+        resultEmojiEl.textContent = "😖";
+        resultTitleEl.textContent = "游戏结束";
+        resultTitleEl.className = "result-title lose";
+      } else {
+        resultEmojiEl.textContent = "🤝";
+        resultTitleEl.textContent = "平局";
+        resultTitleEl.className = "result-title draw";
+      }
+      resultMsgEl.textContent = reason || "";
+      // 仅胜利（通关）时显示“继续挑战”
+      if (btnContinue) btnContinue.style.display = (win === true) ? "" : "none";
+      resultModal.classList.add("show");
+    }
     const leaderboardEl = document.getElementById("leaderboard");
     const btnSound = document.getElementById("btn-sound");
 
@@ -623,6 +671,7 @@
     // ---------- 关卡 / 元素状态 ----------
     let level = 1;            // 当前关卡 1..5
     let levelFoodEaten = 0;   // 本关已吃食物数
+    let level5Cleared = false; // 是否已打通过全部 5 关（仅首次通关弹窗庆祝，之后无限挑战不再弹窗）
     let obstacleCells = [];   // 障碍物占用格 [{x,y}]
     let trapCells = [];       // 陷阱格 [{x,y}]
     let trapStartTime = 0;    // 本关陷阱计时起点（performance.now 基准）
@@ -784,9 +833,10 @@
       lastEntryRank = leaderboard.indexOf(entry);
     }
 
-    /** 把排行榜渲染到结束界面的 DOM 容器 */
-    function renderLeaderboard() {
-      if (!leaderboardEl) return;
+    /** 把排行榜渲染到指定 DOM 容器（默认结束界面容器） */
+    function renderLeaderboard(target) {
+      const el = target || leaderboardEl;
+      if (!el) return;
       const rows = leaderboard.slice(0, LB_MAX);
       let html = '<div class="lb-title"><span>排行榜 Top ' + LB_MAX + '</span>' +
         '<span class="lb-sub">本机记录</span></div>';
@@ -807,7 +857,7 @@
         }
         html += '</ol>';
       }
-      leaderboardEl.innerHTML = html;
+      el.innerHTML = html;
     }
 
     // ---------- 工具函数 ----------
@@ -989,6 +1039,7 @@
     function resetGame() {
       level = 1;
       levelFoodEaten = 0;
+      level5Cleared = false;
       score = 0;
       moveInterval = LEVELS[0].baseSpeed;  // 新游戏基础速度 = L1 基础速度
       boostUntil = 0;
@@ -1127,12 +1178,18 @@
         }
         showToast("⭐ 第 " + level + " 关");
       } else {
-        // 已通关：保持关卡不变，继续无限挑战（levelFoodEaten 归零继续计数）
+        // 已通关：首次打穿全部 5 关时弹窗庆祝并暂停游戏；之后进入无限挑战，不再重复弹窗
         levelFoodEaten = 0;
         updateLevelUI();
-        sfxLevelUp();
-        vibrate(false);
-        showToast("🏆 通关！");
+        if (!level5Cleared) {
+          level5Cleared = true;
+          sfxLevelUp();
+          vibrate(false);
+          showToast("🏆 通关！");
+          renderLeaderboard(resultLeaderboardEl);
+          state = STATE.PAUSED;  // 直接置暂停：冻结蛇身，避免背后继续移动/死亡
+          showResultModal(true, "🏆 通关！你打穿了全部 5 关，可继续无限挑战");
+        }
       }
     }
 
@@ -1169,12 +1226,13 @@
       state = next;
       overlayReady.classList.toggle("hidden", next !== STATE.READY);
       overlayPause.classList.toggle("hidden", next !== STATE.PAUSED);
-      overlayOver.classList.toggle("hidden", next !== STATE.OVER);
+      // 统一结果弹窗（resultModal）承接胜/负展示；原 overlay-over 已移除
     }
 
     function startGame() {
       initAudio();
       resetGame();
+      hideResultModal();
       setState(STATE.PLAYING);
       lastMoveTime = performance.now();
       if (!rafId) loop(performance.now());
@@ -1185,6 +1243,8 @@
         setState(STATE.PAUSED);
         pauseStart = performance.now();
       } else if (state === STATE.PAUSED) {
+        // 若通关弹窗仍打开，先关闭（视为“继续挑战”）
+        if (resultModal && resultModal.classList.contains("show")) hideResultModal();
         // 恢复时重置计时，避免暂停期间累积导致瞬间连跳
         const delta = performance.now() - pauseStart;
         lastMoveTime = performance.now();
@@ -1207,14 +1267,14 @@
       spawnConfetti();
       saveBest(best);   // best 已是历史最高（含当局破纪录）的最大值，无条件持久化
       recordScore(score, level);
-      finalScoreEl.textContent = String(score);
-      finalBestEl.textContent = "历史最高：" + best;
-      finalLevelEl.textContent = "到达第 " + level + " 关";
-      finalRankEl.textContent = (lastEntryRank >= 0)
-        ? "本局排名第 " + (lastEntryRank + 1) + " 名"
-        : "";
-      renderLeaderboard();
+      // 渲染排行榜到统一结果弹窗（保留本机排行功能）
+      renderLeaderboard(resultLeaderboardEl);
       bestEl.textContent = String(best);
+      const rankText = (lastEntryRank >= 0)
+        ? " · 本局排名第 " + (lastEntryRank + 1) + " 名"
+        : "";
+      // 统一结果弹窗（失败）
+      showResultModal(false, "得分 " + score + " · 到达第 " + level + " 关 · 历史最高 " + best + rankText);
     }
 
     // ---------- 输入处理 ----------
@@ -1703,7 +1763,23 @@
 
       btnStart.addEventListener("click", startGame);
       btnResume.addEventListener("click", togglePause);
-      btnRestart.addEventListener("click", startGame);
+      const btnAgain = document.getElementById("btnAgain");
+      if (btnAgain) btnAgain.addEventListener("click", startGame);
+      if (btnContinue) btnContinue.addEventListener("click", function () {
+        hideResultModal();
+        state = STATE.PLAYING;
+        lastMoveTime = performance.now();
+      });
+      if (resultModal) resultModal.addEventListener("click", function (e) {
+        if (e.target === resultModal) {
+          hideResultModal();
+          // 通关弹窗下点击遮罩即“继续挑战”
+          if (state === STATE.PAUSED) {
+            lastMoveTime = performance.now();
+            state = STATE.PLAYING;
+          }
+        }
+      });
 
       // 反馈开关按钮（音效 + 震动总开关）
       btnSound.addEventListener("click", function () {
@@ -1742,5 +1818,19 @@
     }
   })();
   </script>
+
+  <div class="modal-backdrop" id="resultModal">
+    <div class="modal-card">
+      <div class="result-emoji" id="resultEmoji">🎉</div>
+      <div class="result-title" id="resultTitle">你赢了！</div>
+      <div class="result-msg" id="resultMsg"></div>
+      <div class="leaderboard" id="resultLeaderboard"></div>
+      <div class="modal-actions">
+        <a class="btn-ghost" href="index.html">返回大厅</a>
+        <button class="btn-primary" id="btnAgain">再来一局</button>
+        <button class="btn-primary" id="btnContinue">继续挑战</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

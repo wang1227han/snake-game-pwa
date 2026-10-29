@@ -65,12 +65,37 @@ body { min-height: 100%; display: flex; align-items: center; justify-content: ce
 .emoji { line-height: 1; display: block; }
 .board.easy .emoji { font-size: clamp(28px, 9vw, 44px); }
 .board.hard .emoji { font-size: clamp(18px, 6.2vw, 30px); }
-.overlay { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
-  background: rgba(6,16,31,0.62); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
-.overlay[hidden] { display: none; }
-.overlay-card { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 18px;
-  padding: 24px 28px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.45); }
-.overlay-title { font-size: 18px; font-weight: 700; margin-bottom: 18px; color: var(--text-0); }
+/* ===== 胜负结果弹窗（与五子棋一致） ===== */
+.modal-backdrop {
+  position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+  background: rgba(5, 8, 18, 0.6); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  z-index: 50; padding: 20px;
+}
+.modal-backdrop.show { display: flex; animation: fadeBg .2s ease; }
+@keyframes fadeBg { from { opacity: 0; } to { opacity: 1; } }
+.modal-card {
+  width: 100%; max-width: 320px; text-align: center;
+  background: linear-gradient(160deg, rgba(30, 40, 70, 0.96), rgba(11, 16, 32, 0.96));
+  border: 1px solid var(--panel-border); border-radius: 20px; padding: 28px 24px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  transform: translateY(12px) scale(.92); opacity: 0;
+}
+.modal-backdrop.show .modal-card { animation: popCard .32s cubic-bezier(.2, .9, .3, 1.3) forwards; }
+@keyframes popCard { to { transform: translateY(0) scale(1); opacity: 1; } }
+.result-emoji { font-size: 56px; line-height: 1; margin-bottom: 8px; }
+.result-title { font-size: 24px; font-weight: 800; margin-bottom: 6px; }
+.result-title.win { color: var(--accent); }
+.result-title.lose { color: var(--danger); }
+.result-title.draw { color: var(--accent-2); }
+.result-msg { font-size: 14px; color: var(--text-1); margin-bottom: 20px; line-height: 1.6; }
+.modal-actions { display: flex; gap: 10px; }
+.modal-actions a, .modal-actions button {
+  flex: 1; padding: 12px; border-radius: 12px; cursor: pointer; font-weight: 700; font-size: 15px;
+  text-decoration: none; border: none; transition: transform .1s ease, filter .1s ease;
+}
+.modal-actions .btn-primary { background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #06121f; }
+.modal-actions .btn-ghost { background: var(--panel); color: var(--text-0); border: 1px solid var(--panel-border) !important; }
+.modal-actions .btn-primary:active, .modal-actions .btn-ghost:active { transform: scale(0.97); filter: brightness(1.05); }
 </style>
 </head>
 <body>
@@ -95,10 +120,15 @@ body { min-height: 100%; display: flex; align-items: center; justify-content: ce
 
   <div class="board easy" id="board"></div>
 
-  <div class="overlay" id="overlay" hidden>
-    <div class="overlay-card">
-      <div class="overlay-title" id="overlay-title">🎉 通关！</div>
-      <button class="btn" id="btn-again">再来一局</button>
+  <div class="modal-backdrop" id="resultModal">
+    <div class="modal-card">
+      <div class="result-emoji" id="resultEmoji">🎉</div>
+      <div class="result-title" id="resultTitle">你赢了！</div>
+      <div class="result-msg" id="resultMsg"></div>
+      <div class="modal-actions">
+        <a class="btn-ghost" href="index.html">返回大厅</a>
+        <button class="btn-primary" id="btnAgain">再来一局</button>
+      </div>
     </div>
   </div>
 </div>
@@ -149,6 +179,21 @@ body { min-height: 100%; display: flex; align-items: center; justify-content: ce
   resizeFx();
   window.addEventListener("resize", resizeFx);
 
+  /* ===== 胜负结果弹窗逻辑（与五子棋一致） ===== */
+  function hideResultModal() { if (resultModal) resultModal.classList.remove("show"); }
+  function showResultModal(win, reason) {
+    if (!resultModal) return;
+    let emoji, title, cls, msg;
+    if (win === true) { emoji = "🎉"; title = "你赢了！"; cls = "win"; msg = reason || "恭喜通关，干得漂亮！"; }
+    else if (win === false) { emoji = "😖"; title = "游戏结束"; cls = "lose"; msg = reason || "再接再厉，下一局会更好！"; }
+    else { emoji = "🤝"; title = "平局"; cls = "draw"; msg = reason || "势均力敌，不分胜负！"; }
+    document.getElementById("resultEmoji").textContent = emoji;
+    const tEl = document.getElementById("resultTitle");
+    tEl.textContent = title; tEl.className = "result-title " + cls;
+    document.getElementById("resultMsg").textContent = msg;
+    resultModal.classList.add("show");
+  }
+
   /* ===== Memory game ===== */
   const SYMBOLS = ["🍎","🍌","🍇","🍓","🍒","🥝","🍉","🍑","🥥","🍍","🥭","🍊","🫐","🍋","🍈","🐶","🐱","🐭"];
 
@@ -156,9 +201,7 @@ body { min-height: 100%; display: flex; align-items: center; justify-content: ce
   const statusEl = document.getElementById("status");
   const diffBtns = document.querySelectorAll(".diff-btn");
   const replayBtn = document.getElementById("btn-replay");
-  const overlay = document.getElementById("overlay");
-  const overlayTitle = document.getElementById("overlay-title");
-  const againBtn = document.getElementById("btn-again");
+  const resultModal = document.getElementById("resultModal");
 
   let cols = 4;
   let deck = [];
@@ -273,10 +316,9 @@ body { min-height: 100%; display: flex; align-items: center; justify-content: ce
   function win() {
     stopTimer();
     const sec = elapsedSec();
-    overlayTitle.textContent = "🎉 通关！用时 " + sec + " 秒 · " + moves + " 步";
-    overlay.hidden = false;
     launchConfetti(["#4ade80", "#22d3ee", "#fbbf24", "#ffffff"]);
     sndWin();
+    showResultModal(true, "用时 " + sec + " 秒 · " + moves + " 步，全部配对成功！");
   }
 
   /** (Re)start a game at the current difficulty. */
@@ -288,7 +330,7 @@ body { min-height: 100%; display: flex; align-items: center; justify-content: ce
     matchedCount = 0;
     moves = 0;
     lock = false;
-    overlay.hidden = true;
+    hideResultModal();
     buildDeck();
     render();
     updateStatus();
@@ -305,7 +347,8 @@ body { min-height: 100%; display: flex; align-items: center; justify-content: ce
   });
 
   replayBtn.addEventListener("click", newGame);
-  againBtn.addEventListener("click", newGame);
+  document.getElementById("btnAgain").addEventListener("click", function () { hideResultModal(); newGame(); });
+  if (resultModal) resultModal.addEventListener("click", function (e) { if (e.target === resultModal) hideResultModal(); });
 
   newGame();
 })();
