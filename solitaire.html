@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="纸牌接龙" />
+  <title>纸牌接龙 · Klondike</title>
+  <style>
+    /* ===== 共享视觉套件（原样使用） ===== */
+    :root {
+      --bg-0: #0b1020; --panel: rgba(255,255,255,0.04); --panel-border: rgba(255,255,255,0.08);
+      --text-0: #e8ecf5; --text-1: #9aa6c4; --accent: #4ade80; --accent-2: #22d3ee; --danger: #f87171;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body { min-height: 100%; display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(1200px 800px at 50% -10%, #1a2440, var(--bg-0));
+      color: var(--text-0);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      padding: 14px; overflow-x: hidden; }
+    .app { width: 100%; max-width: 460px; }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .back-link { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 10px;
+      border: 1px solid var(--panel-border); background: var(--panel); color: var(--text-1); font-size: 13px; text-decoration: none; }
+    .back-link:hover { color: var(--text-0); }
+    .sound-toggle { width: 38px; height: 38px; border-radius: 10px; cursor: pointer; border: 1px solid var(--panel-border);
+      background: var(--panel); color: var(--text-0); font-size: 18px; line-height: 1;
+      display: inline-flex; align-items: center; justify-content: center; transition: all .12s ease; }
+    .sound-toggle:hover { color: var(--accent); border-color: rgba(255,255,255,0.18); }
+    .title { display: flex; align-items: baseline; gap: 8px; }
+    .title h1 { font-size: 20px; font-weight: 700; background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .title .sub { font-size: 12px; color: var(--text-1); }
+    .btn { padding: 10px 22px; border-radius: 12px; cursor: pointer; border: none;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #06121f; font-weight: 700; font-size: 15px; }
+    .panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 14px; padding: 12px; }
+    #fx { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 60; }
+
+    /* ===== 纸牌接龙专用样式 ===== */
+    :root { --cw: 44px; --ch: 62px; }
+    .top-row { display: flex; align-items: flex-start; gap: 6px; }
+    .top-row .spacer { flex: 1 1 auto; }
+    .foundations { display: flex; gap: 6px; flex: 0 0 auto; }
+
+    .slot {
+      position: relative; width: var(--cw); height: var(--ch); border-radius: 7px;
+      border: 1px dashed rgba(255,255,255,0.18); background: rgba(255,255,255,0.03);
+      flex: 0 0 auto;
+    }
+    .slot.empty { cursor: pointer; }
+
+    .card {
+      position: absolute; width: var(--cw); height: var(--ch); border-radius: 7px;
+      background: #fff; color: #1a2238; box-shadow: 0 1px 3px rgba(0,0,0,0.40);
+      border: 1px solid rgba(0,0,0,0.12); cursor: pointer; user-select: none;
+      font-family: inherit; -webkit-tap-highlight-color: transparent;
+    }
+    .card .rank { position: absolute; top: 2px; left: 4px; font-weight: 700; font-size: 12px; line-height: 1; }
+    .card .suit { position: absolute; top: 52%; left: 50%; transform: translate(-50%,-50%); font-size: 20px; }
+    .card.red { color: #e23b3b; }
+    .card.dark { color: #1a2238; }
+    .card.back {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border: 1px solid rgba(255,255,255,0.25);
+    }
+    .card.back::after {
+      content: ""; position: absolute; inset: 6px; border-radius: 5px;
+      border: 1px solid rgba(255,255,255,0.30);
+      background:
+        repeating-linear-gradient(45deg, rgba(255,255,255,0.10) 0 4px, transparent 4px 8px);
+    }
+    .card.selected {
+      outline: 2px solid var(--accent-2);
+      box-shadow: 0 0 0 2px var(--accent-2), 0 4px 14px rgba(34,211,238,0.55);
+      z-index: 6;
+    }
+    .card.seq { box-shadow: 0 0 0 2px rgba(74,222,128,0.65), 0 2px 8px rgba(0,0,0,0.4); z-index: 5; }
+
+    .tableau { display: flex; gap: 4px; margin-top: 12px; }
+    .col { position: relative; flex: 1 1 0; min-width: 0; border-radius: 7px; }
+    .col.empty { border: 1px dashed rgba(255,255,255,0.18); background: rgba(255,255,255,0.02); }
+
+    .controls { display: flex; gap: 8px; margin-top: 14px; justify-content: center; }
+    .controls .btn { padding: 9px 18px; font-size: 14px; flex: 1 1 0; }
+    .controls .btn:active { transform: scale(0.97); }
+
+    .status {
+      margin-top: 12px; text-align: center; font-size: 13px; color: var(--text-1);
+      min-height: 18px; line-height: 1.4;
+    }
+    .status.win { color: var(--accent); font-weight: 700; font-size: 15px; }
+
+    @media (max-width: 380px) {
+      :root { --cw: 38px; --ch: 54px; }
+      .card .suit { font-size: 17px; }
+      .card .rank { font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <a class="back-link" href="index.html">← 大厅</a>
+      <div class="title"><h1>纸牌接龙</h1><span class="sub">KLONDIKE</span></div>
+      <button class="sound-toggle" id="btn-sound" title="音效开关">🔊</button>
+    </div>
+
+    <div class="panel">
+      <div class="top-row">
+        <div id="stock"></div>
+        <div id="waste"></div>
+        <div class="spacer"></div>
+        <div id="foundations" class="foundations"></div>
+      </div>
+
+      <div class="tableau" id="tableau"></div>
+
+      <div class="controls">
+        <button class="btn" id="btn-new">新局</button>
+        <button class="btn" id="btn-auto">自动归位</button>
+      </div>
+
+      <div class="status" id="status"></div>
+    </div>
+  </div>
+
+  <canvas id="fx"></canvas>
+
+  <script>
+  (function () {
+    "use strict";
+
+    /* =========================================================
+       共享音效与特效套件（原样使用，请勿修改）
+       ========================================================= */
+    let audioCtx = null, muted = false;
+    function ac() {
+      if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audioCtx = null; } }
+      if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+      return audioCtx;
+    }
+    function tone(freq, dur, type, vol) {
+      if (muted) return; const a = ac(); if (!a) return;
+      const o = a.createOscillator(), g = a.createGain();
+      o.type = type || "sine"; o.frequency.value = freq;
+      const now = a.currentTime; g.gain.setValueAtTime(vol || 0.12, now);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      o.connect(g); g.connect(a.destination); o.start(now); o.stop(now + dur + 0.02);
+    }
+    function sndDeal(){ tone(420,0.08,"triangle",0.10); }
+    function sndMove(){ tone(560,0.06,"triangle",0.09); }
+    function sndInvalid(){ tone(180,0.12,"square",0.10); }
+    function sndWin(){ [523,659,784,1046].forEach((f,i)=>setTimeout(()=>tone(f,0.18,"sine",0.14),i*90)); }
+    const fxCanvas = document.getElementById("fx");
+    const fxCtx = fxCanvas.getContext("2d");
+    let fxParticles = [], fxRAF = null, dpr = window.devicePixelRatio || 1;
+    function resizeFx(){ fxCanvas.width = window.innerWidth*dpr; fxCanvas.height = window.innerHeight*dpr; fxCtx.setTransform(dpr,0,0,dpr,0,0); }
+    function launchConfetti(colors){
+      const W = window.innerWidth, H = window.innerHeight; fxParticles = [];
+      for (let i=0;i<130;i++){ fxParticles.push({ x:Math.random()*W, y:-20-Math.random()*H*0.35,
+        vx:(Math.random()-0.5)*4, vy:2+Math.random()*4, rot:Math.random()*Math.PI*2, vr:(Math.random()-0.5)*0.3,
+        size:4+Math.random()*5, col:colors[Math.floor(Math.random()*colors.length)] }); }
+      if (fxRAF) cancelAnimationFrame(fxRAF); fxLoop();
+    }
+    function fxLoop(){
+      const W = window.innerWidth, H = window.innerHeight; fxCtx.clearRect(0,0,W,H); let alive=false;
+      for (const p of fxParticles){ p.x+=p.vx; p.y+=p.vy; p.vy+=0.05; p.rot+=p.vr;
+        if (p.y < H+30) alive=true; fxCtx.save(); fxCtx.translate(p.x,p.y); fxCtx.rotate(p.rot);
+        fxCtx.fillStyle=p.col; fxCtx.fillRect(-p.size/2,-p.size/2,p.size,p.size*0.6); fxCtx.restore(); }
+      if (alive) fxRAF = requestAnimationFrame(fxLoop); else { fxParticles=[]; fxCtx.clearRect(0,0,W,H); }
+    }
+    const btnSound = document.getElementById("btn-sound");
+    btnSound.addEventListener("click", function(){ muted=!muted; btnSound.textContent = muted?"🔇":"🔊"; if(!muted) ac(); });
+    // 初始化：resizeFx(); window.addEventListener("resize", resizeFx);
+
+    /* =========================================================
+       纸牌接龙（Klondike）游戏逻辑
+       ========================================================= */
+    const SUITS = ['♠', '♥', '♦', '♣'];
+    const RED = { '♥': true, '♦': true };
+    const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+
+    // DOM 引用
+    const elStock = document.getElementById('stock');
+    const elWaste = document.getElementById('waste');
+    const elFounds = document.getElementById('foundations');
+    const elTableau = document.getElementById('tableau');
+    const elStatus = document.getElementById('status');
+
+    // 游戏状态
+    let stock = [];
+    let waste = [];
+    let foundations = [[], [], [], []];
+    let tableau = [[], [], [], [], [], [], []];
+    let selected = null; // { area:'tableau', col, index } 或 { area:'waste' }
+    let statusMsg = '';
+    let won = false;
+
+    let idCounter = 0;
+    function buildDeck() {
+      const d = [];
+      for (const s of SUITS) {
+        for (const r of RANKS) {
+          d.push({
+            id: idCounter++,
+            suit: s,
+            rank: r,
+            val: RANKS.indexOf(r) + 1, // A=1 ... K=13
+            color: RED[s] ? 'red' : 'dark',
+            faceUp: false
+          });
+        }
+      }
+      return d;
+    }
+    function shuffleArr(a) {
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = a[i]; a[i] = a[j]; a[j] = t;
+      }
+      return a;
+    }
+
+    function newGame() {
+      const d = shuffleArr(buildDeck());
+      stock = []; waste = []; foundations = [[], [], [], []]; tableau = [[], [], [], [], [], [], []];
+      // 发 7 列：第 i 列 i+1 张，最上面 1 张明牌，其余暗牌
+      for (let i = 0; i < 7; i++) {
+        for (let k = 0; k <= i; k++) {
+          const c = d.pop();
+          c.faceUp = (k === i);
+          tableau[i].push(c);
+        }
+      }
+      // 剩余 24 张进入发牌堆
+      while (d.length) stock.push(d.pop());
+      selected = null;
+      won = false;
+      statusMsg = '点击明牌选中，再点目标列 / 回收堆移动；点发牌堆发牌';
+      sndDeal();
+      render();
+    }
+
+    /* ---------- 渲染 ---------- */
+    function cardMetrics() {
+      const probe = document.createElement('div');
+      probe.className = 'card';
+      probe.style.visibility = 'hidden';
+      document.body.appendChild(probe);
+      const h = probe.offsetHeight || 62;
+      document.body.removeChild(probe);
+      return h;
+    }
+
+    function makeCardEl(card) {
+      const el = document.createElement('div');
+      if (card.faceUp) {
+        el.className = 'card ' + card.color;
+        const r = document.createElement('div');
+        r.className = 'rank';
+        r.textContent = card.rank;
+        const s = document.createElement('div');
+        s.className = 'suit';
+        s.textContent = card.suit;
+        el.appendChild(r);
+        el.appendChild(s);
+      } else {
+        el.className = 'card back';
+      }
+      return el;
+    }
+
+    function renderStock() {
+      elStock.innerHTML = '';
+      elStock.className = 'slot' + (stock.length ? '' : ' empty');
+      if (stock.length > 0) {
+        const back = document.createElement('div');
+        back.className = 'card back';
+        back.style.left = '0'; back.style.top = '0'; back.style.transform = 'none';
+        elStock.appendChild(back);
+      }
+      elStock.onclick = onStockClick;
+    }
+
+    function renderWaste() {
+      elWaste.innerHTML = '';
+      elWaste.className = 'slot' + (waste.length ? '' : ' empty');
+      if (waste.length > 0) {
+        const c = waste[waste.length - 1];
+        const el = makeCardEl(c);
+        el.style.left = '0'; el.style.top = '0'; el.style.transform = 'none';
+        if (selected && selected.area === 'waste') el.classList.add('selected');
+        el.onclick = function (ev) { ev.stopPropagation(); onWasteClick(); };
+        elWaste.appendChild(el);
+      }
+      elWaste.onclick = onWasteClick;
+    }
+
+    function renderFoundations() {
+      elFounds.innerHTML = '';
+      for (let fi = 0; fi < 4; fi++) {
+        const slot = document.createElement('div');
+        slot.className = 'slot' + (foundations[fi].length ? '' : ' empty');
+        if (foundations[fi].length > 0) {
+          const c = foundations[fi][foundations[fi].length - 1];
+          const el = makeCardEl(c);
+          el.style.left = '0'; el.style.top = '0'; el.style.transform = 'none';
+          slot.appendChild(el);
+        }
+        slot.onclick = (function (f) { return function () { onFoundationClick(f); }; })(fi);
+        elFounds.appendChild(slot);
+      }
+    }
+
+    function renderTableau() {
+      elTableau.innerHTML = '';
+      const h = cardMetrics();
+      const DOWN = Math.round(h * 0.16); // 暗牌叠放步长（仅露出窄边）
+      const UP = Math.round(h * 0.40);   // 明牌叠放步长（露出点数与花色）
+      for (let col = 0; col < 7; col++) {
+        const colEl = document.createElement('div');
+        colEl.className = 'col' + (tableau[col].length === 0 ? ' empty' : '');
+        let y = 0, lastStep = 0;
+        tableau[col].forEach(function (card, idx) {
+          const el = makeCardEl(card);
+          el.style.top = y + 'px';
+          el.style.left = '50%';
+          el.style.transform = 'translateX(-50%)';
+          if (selected && selected.area === 'tableau' && selected.col === col && idx === selected.index) {
+            el.classList.add('selected');
+          }
+          if (selected && selected.area === 'tableau' && selected.col === col && idx > selected.index) {
+            el.classList.add('seq');
+          }
+          el.onclick = (function (c, i) {
+            return function (ev) { ev.stopPropagation(); handleTableauCardClick(c, i); };
+          })(col, idx);
+          colEl.appendChild(el);
+          lastStep = card.faceUp ? UP : DOWN;
+          y += lastStep;
+        });
+        const colH = tableau[col].length ? (y - lastStep + h) : h;
+        colEl.style.height = colH + 'px';
+        colEl.onclick = (function (c) { return function (ev) { onColumnClick(c, ev); }; })(col);
+        elTableau.appendChild(colEl);
+      }
+    }
+
+    function updateStatus() {
+      elStatus.textContent = statusMsg;
+      elStatus.classList.toggle('win', won);
+    }
+
+    function render() {
+      renderStock();
+      renderWaste();
+      renderFoundations();
+      renderTableau();
+      updateStatus();
+    }
+
+    /* ---------- 规则辅助 ---------- */
+    function leadingCard() {
+      if (!selected) return null;
+      if (selected.area === 'waste') return waste.length ? waste[waste.length - 1] : null;
+      return tableau[selected.col][selected.index];
+    }
+
+    function canPlaceOnColumn(col) {
+      const lead = leadingCard();
+      if (!lead) return false;
+      const tcol = tableau[col];
+      if (tcol.length === 0) return lead.val === 13; // 空列只接受 K
+      const top = tcol[tcol.length - 1];
+      if (!top.faceUp) return false;
+      return lead.color !== top.color && lead.val === top.val - 1; // 颜色交替、点数递减
+    }
+
+    function canFoundation(card, f) {
+      if (f.length === 0) return card.val === 1; // 从 A 开始
+      const top = f[f.length - 1];
+      return top.suit === card.suit && card.val === top.val + 1; // 同花色递增
+    }
+
+    function takeSelectedSequence() {
+      if (selected.area === 'waste') return [waste.pop()];
+      const col = selected.col, idx = selected.index;
+      return tableau[col].splice(idx); // 取 idx 起到末尾的整段
+    }
+
+    function autoFlip(col) {
+      if (col == null) return;
+      const t = tableau[col];
+      if (t.length > 0) {
+        const top = t[t.length - 1];
+        if (!top.faceUp) top.faceUp = true;
+      }
+    }
+
+    /* ---------- 移动执行 ---------- */
+    function doMoveToColumn(col) {
+      const srcCol = (selected && selected.area === 'tableau') ? selected.col : null;
+      const moving = takeSelectedSequence();
+      tableau[col].push.apply(tableau[col], moving);
+      autoFlip(srcCol);
+      selected = null;
+      sndMove();
+      checkWin();
+      render();
+    }
+
+    function attemptMoveToColumn(col) {
+      if (!selected) return;
+      if (!canPlaceOnColumn(col)) {
+        sndInvalid();
+        statusMsg = '不能放到这一列（空列只接 K；否则需颜色交替、点数递减）';
+        updateStatus();
+        return;
+      }
+      doMoveToColumn(col);
+    }
+
+    function attemptMoveToFoundation(fi) {
+      if (!selected) return;
+      // 只有单张才能上回收堆
+      const moving = peekSelectedSingle();
+      if (!moving) {
+        sndInvalid();
+        statusMsg = '回收堆只能单张归位，先把整段牌移开';
+        updateStatus();
+        return;
+      }
+      const f = foundations[fi];
+      if (!canFoundation(moving, f)) {
+        sndInvalid();
+        statusMsg = '该回收堆需要：' + (f.length === 0 ? 'A 开头' : '同花色、比顶牌大 1');
+        updateStatus();
+        return;
+      }
+      const srcCol = (selected.area === 'tableau') ? selected.col : null;
+      takeSelectedSequence();
+      f.push(moving);
+      autoFlip(srcCol);
+      selected = null;
+      sndMove();
+      statusMsg = '已归位 ' + moving.rank + moving.suit;
+      checkWin();
+      render();
+    }
+
+    function peekSelectedSingle() {
+      if (!selected) return null;
+      if (selected.area === 'waste') return waste.length ? waste[waste.length - 1] : null;
+      if (selected.area === 'tableau') {
+        const col = selected.col;
+        if (selected.index === tableau[col].length - 1) return tableau[col][selected.index];
+        return null; // 选中的是一段（多张）
+      }
+      return null;
+    }
+
+    /* ---------- 自动归位 ---------- */
+    function autoCollect() {
+      if (won) return;
+      let moved = false, guard = 0;
+      while (guard++ < 300) {
+        let did = false;
+        // 废牌堆顶
+        if (waste.length) {
+          const c = waste[waste.length - 1];
+          for (let fi = 0; fi < 4; fi++) {
+            if (canFoundation(c, foundations[fi])) { foundations[fi].push(waste.pop()); did = true; break; }
+          }
+        }
+        // 各牌桌顶（明牌）
+        if (!did) {
+          for (let ci = 0; ci < 7; ci++) {
+            const col = tableau[ci];
+            if (col.length && col[col.length - 1].faceUp) {
+              const c = col[col.length - 1];
+              for (let fi = 0; fi < 4; fi++) {
+                if (canFoundation(c, foundations[fi])) {
+                  col.pop();
+                  autoFlip(ci);
+                  foundations[fi].push(c);
+                  did = true; break;
+                }
+              }
+            }
+            if (did) break;
+          }
+        }
+        if (did) moved = true; else break;
+      }
+      if (moved) {
+        selected = null;
+        sndMove();
+        statusMsg = '已自动归位可放的牌';
+        checkWin();
+        render();
+      } else {
+        statusMsg = '当前没有可自动归位的牌';
+        updateStatus();
+      }
+    }
+
+    /* ---------- 胜负 ---------- */
+    function checkWin() {
+      const total = foundations[0].length + foundations[1].length + foundations[2].length + foundations[3].length;
+      if (total === 52 && !won) {
+        won = true;
+        statusMsg = '🎉 通关！';
+        launchConfetti(['#4ade80', '#22d3ee', '#fbbf24', '#ffffff']);
+        sndWin();
+      }
+    }
+
+    /* ---------- 交互处理 ---------- */
+    function onStockClick() {
+      if (won) return;
+      if (stock.length > 0) {
+        const c = stock.pop();
+        c.faceUp = true;
+        waste.push(c);
+        selected = null;
+        sndDeal();
+        statusMsg = '发牌';
+        render();
+      } else if (waste.length > 0) {
+        // 回收：把废牌堆整体翻回发牌堆（无限循环）
+        while (waste.length) {
+          const c = waste.pop();
+          c.faceUp = false;
+          stock.push(c);
+        }
+        selected = null;
+        sndDeal();
+        statusMsg = '回收废牌堆，可再次发牌';
+        render();
+      } else {
+        statusMsg = '发牌堆与废牌堆都为空';
+        updateStatus();
+      }
+    }
+
+    function onWasteClick() {
+      if (won) return;
+      if (waste.length === 0) return;
+      const top = waste[waste.length - 1];
+      if (selected) {
+        if (selected.area === 'waste') {
+          selected = null;
+          statusMsg = '已取消选择';
+          render();
+          return;
+        }
+        selected = { area: 'waste' };
+        statusMsg = '已选中 ' + top.rank + top.suit + '，点目标列或回收堆';
+        render();
+        return;
+      }
+      selected = { area: 'waste' };
+      statusMsg = '已选中 ' + top.rank + top.suit + '，点目标列或回收堆';
+      render();
+    }
+
+    function onFoundationClick(fi) {
+      if (won) return;
+      if (!selected) return; // 未选中时点击回收堆无操作（避免误响）
+      attemptMoveToFoundation(fi);
+    }
+
+    function onColumnClick(col, ev) {
+      if (won) return;
+      // 仅当点击的是列空白区域（非某张牌）时才作为落点
+      const t = ev.target;
+      if (t && t.classList && t.classList.contains('card')) return; // 牌的点击已单独处理
+      if (selected) {
+        attemptMoveToColumn(col);
+      } else {
+        statusMsg = '先点一张明牌选中，再点此列放置（空列只接 K）';
+        updateStatus();
+      }
+    }
+
+    function handleTableauCardClick(col, idx) {
+      if (won) return;
+      const card = tableau[col][idx];
+      if (!card.faceUp) {
+        // 暗牌：仅当它是该列顶牌时可翻为明牌
+        if (idx === tableau[col].length - 1) {
+          card.faceUp = true;
+          selected = null;
+          sndMove();
+          statusMsg = '已翻开一张暗牌';
+          render();
+        } else {
+          sndInvalid();
+          statusMsg = '这张牌被压住了，无法操作';
+          updateStatus();
+        }
+        return;
+      }
+      // 明牌
+      if (selected) {
+        if (selected.area === 'tableau' && selected.col === col && selected.index === idx) {
+          // 再次点击已选中的牌 -> 取消选择
+          selected = null;
+          statusMsg = '已取消选择';
+          render();
+          return;
+        }
+        if (selected.area === 'tableau' && selected.col === col && idx > selected.index) {
+          // 点击的是当前所选序列中的牌 -> 忽略
+          return;
+        }
+        if (idx === tableau[col].length - 1 && canPlaceOnColumn(col)) {
+          // 点到合法的目标列顶牌 -> 移动
+          doMoveToColumn(col);
+          return;
+        }
+        // 否则视为改选这张明牌
+        selected = { area: 'tableau', col: col, index: idx };
+        statusMsg = '已选中 ' + card.rank + card.suit + '（共 ' + (tableau[col].length - idx) + ' 张可整体移动），点目标列或回收堆';
+        render();
+        return;
+      }
+      // 未选中 -> 选中这张明牌（其上方整段都可整体移动）
+      selected = { area: 'tableau', col: col, index: idx };
+      statusMsg = '已选中 ' + card.rank + card.suit + '（共 ' + (tableau[col].length - idx) + ' 张可整体移动），点目标列或回收堆';
+      render();
+    }
+
+    /* ---------- 初始化 ---------- */
+    document.getElementById('btn-new').onclick = function () { newGame(); };
+    document.getElementById('btn-auto').onclick = function () { autoCollect(); };
+
+    resizeFx();
+    window.addEventListener('resize', resizeFx);
+
+    newGame();
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>记忆翻牌 · Memory</title>
+<style>
+:root {
+  --bg-0: #0b1020; --panel: rgba(255,255,255,0.04); --panel-border: rgba(255,255,255,0.08);
+  --text-0: #e8ecf5; --text-1: #9aa6c4; --accent: #4ade80; --accent-2: #22d3ee; --danger: #f87171;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { min-height: 100%; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(1200px 800px at 50% -10%, #1a2440, var(--bg-0));
+  color: var(--text-0);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  padding: 14px; }
+.app { width: 100%; max-width: 460px; }
+.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.back-link { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 10px;
+  border: 1px solid var(--panel-border); background: var(--panel); color: var(--text-1); font-size: 13px; text-decoration: none; }
+.back-link:hover { color: var(--text-0); }
+.sound-toggle { width: 38px; height: 38px; border-radius: 10px; cursor: pointer; border: 1px solid var(--panel-border);
+  background: var(--panel); color: var(--text-0); font-size: 18px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center; transition: all .12s ease; }
+.sound-toggle:hover { color: var(--accent); border-color: rgba(255,255,255,0.18); }
+.title { display: flex; align-items: baseline; gap: 8px; }
+.title h1 { font-size: 20px; font-weight: 700; background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text; background-clip: text; color: transparent; }
+.title .sub { font-size: 12px; color: var(--text-1); }
+.btn { padding: 10px 22px; border-radius: 12px; cursor: pointer; border: none;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #06121f; font-weight: 700; font-size: 15px; }
+.panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 14px; padding: 12px; }
+#fx { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 60; }
+
+/* ===== Memory game styles ===== */
+.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.diff-group { display: flex; gap: 8px; }
+.diff-btn { padding: 8px 12px; border-radius: 10px; cursor: pointer; border: 1px solid var(--panel-border);
+  background: var(--panel); color: var(--text-1); font-size: 13px; font-weight: 600;
+  -webkit-tap-highlight-color: transparent; transition: color .12s ease, background .12s ease; }
+.diff-btn:hover { color: var(--text-0); }
+.diff-btn.active { color: #06121f; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-color: transparent; }
+.status { text-align: center; margin-bottom: 10px; font-size: 14px; color: var(--text-1);
+  font-variant-numeric: tabular-nums; letter-spacing: .3px; }
+.board { display: grid; }
+.board.easy { grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.board.hard { grid-template-columns: repeat(6, 1fr); gap: 7px; }
+.card { position: relative; aspect-ratio: 1 / 1; perspective: 700px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  -webkit-user-select: none; user-select: none; }
+.card-inner { position: absolute; inset: 0; transform-style: preserve-3d;
+  transition: transform .45s cubic-bezier(.4, .2, .2, 1); will-change: transform; }
+.card.flipped .card-inner { transform: rotateY(180deg); }
+.card-face { position: absolute; inset: 0; -webkit-backface-visibility: hidden; backface-visibility: hidden;
+  border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.card-back { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border: 1px solid rgba(255,255,255,0.14);
+  color: rgba(6,18,31,0.85); font-weight: 800; }
+.card-back::after { content: "?"; font-size: 26px; line-height: 1; }
+.card-front { transform: rotateY(180deg); background: var(--panel); border: 1px solid var(--panel-border);
+  transition: background .2s ease, border-color .2s ease; }
+.card.matched { cursor: default; }
+.card.matched .card-front { background: rgba(74,222,128,0.14); border-color: rgba(74,222,128,0.45); }
+.emoji { line-height: 1; display: block; }
+.board.easy .emoji { font-size: clamp(28px, 9vw, 44px); }
+.board.hard .emoji { font-size: clamp(18px, 6.2vw, 30px); }
+.overlay { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+  background: rgba(6,16,31,0.62); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+.overlay[hidden] { display: none; }
+.overlay-card { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 18px;
+  padding: 24px 28px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.45); }
+.overlay-title { font-size: 18px; font-weight: 700; margin-bottom: 18px; color: var(--text-0); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <a class="back-link" href="index.html">← 大厅</a>
+    <div class="title"><h1>记忆翻牌</h1><span class="sub">MEMORY</span></div>
+    <button class="sound-toggle" id="btn-sound" title="音效开关">🔊</button>
+  </div>
+  <canvas id="fx"></canvas>
+
+  <div class="toolbar">
+    <div class="diff-group">
+      <button class="diff-btn active" data-cols="4">简单 4×4</button>
+      <button class="diff-btn" data-cols="6">困难 6×6</button>
+    </div>
+    <button class="btn" id="btn-replay">重玩</button>
+  </div>
+
+  <div class="status" id="status">⏱ 00:00 · 步数 0</div>
+
+  <div class="board easy" id="board"></div>
+
+  <div class="overlay" id="overlay" hidden>
+    <div class="overlay-card">
+      <div class="overlay-title" id="overlay-title">🎉 通关！</div>
+      <button class="btn" id="btn-again">再来一局</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ===== Shared visual & audio suite (verbatim) ===== */
+  let audioCtx = null, muted = false;
+  function ac() {
+    if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audioCtx = null; } }
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  }
+  function tone(freq, dur, type, vol) {
+    if (muted) return; const a = ac(); if (!a) return;
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = type || "sine"; o.frequency.value = freq;
+    const now = a.currentTime; g.gain.setValueAtTime(vol || 0.12, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    o.connect(g); g.connect(a.destination); o.start(now); o.stop(now + dur + 0.02);
+  }
+  function sndFlip(){ tone(520,0.06,"triangle",0.09); }
+  function sndMatch(){ [659,880].forEach((f,i)=>setTimeout(()=>tone(f,0.14,"sine",0.12),i*70)); }
+  function sndNoMatch(){ tone(200,0.18,"square",0.10); }
+  function sndWin(){ [523,659,784,1046].forEach((f,i)=>setTimeout(()=>tone(f,0.18,"sine",0.14),i*90)); }
+  const fxCanvas = document.getElementById("fx");
+  const fxCtx = fxCanvas.getContext("2d");
+  let fxParticles = [], fxRAF = null, dpr = window.devicePixelRatio || 1;
+  function resizeFx(){ fxCanvas.width = window.innerWidth*dpr; fxCanvas.height = window.innerHeight*dpr; fxCtx.setTransform(dpr,0,0,dpr,0,0); }
+  function launchConfetti(colors){
+    const W = window.innerWidth, H = window.innerHeight; fxParticles = [];
+    for (let i=0;i<130;i++){ fxParticles.push({ x:Math.random()*W, y:-20-Math.random()*H*0.35,
+      vx:(Math.random()-0.5)*4, vy:2+Math.random()*4, rot:Math.random()*Math.PI*2, vr:(Math.random()-0.5)*0.3,
+      size:4+Math.random()*5, col:colors[Math.floor(Math.random()*colors.length)] }); }
+    if (fxRAF) cancelAnimationFrame(fxRAF); fxLoop();
+  }
+  function fxLoop(){
+    const W = window.innerWidth, H = window.innerHeight; fxCtx.clearRect(0,0,W,H); let alive=false;
+    for (const p of fxParticles){ p.x+=p.vx; p.y+=p.vy; p.vy+=0.05; p.rot+=p.vr;
+      if (p.y < H+30) alive=true; fxCtx.save(); fxCtx.translate(p.x,p.y); fxCtx.rotate(p.rot);
+      fxCtx.fillStyle=p.col; fxCtx.fillRect(-p.size/2,-p.size/2,p.size,p.size*0.6); fxCtx.restore(); }
+    if (alive) fxRAF = requestAnimationFrame(fxLoop); else { fxParticles=[]; fxCtx.clearRect(0,0,W,H); }
+  }
+  const btnSound = document.getElementById("btn-sound");
+  btnSound.addEventListener("click", function(){ muted=!muted; btnSound.textContent = muted?"🔇":"🔊"; if(!muted) ac(); });
+  resizeFx();
+  window.addEventListener("resize", resizeFx);
+
+  /* ===== Memory game ===== */
+  const SYMBOLS = ["🍎","🍌","🍇","🍓","🍒","🥝","🍉","🍑","🥥","🍍","🥭","🍊","🫐","🍋","🍈","🐶","🐱","🐭"];
+
+  const boardEl = document.getElementById("board");
+  const statusEl = document.getElementById("status");
+  const diffBtns = document.querySelectorAll(".diff-btn");
+  const replayBtn = document.getElementById("btn-replay");
+  const overlay = document.getElementById("overlay");
+  const overlayTitle = document.getElementById("overlay-title");
+  const againBtn = document.getElementById("btn-again");
+
+  let cols = 4;
+  let deck = [];
+  let flipped = [];
+  let matchedCount = 0;
+  let moves = 0;
+  let lock = false;
+  let timerId = null;
+  let startTime = 0;
+  let started = false;
+
+  /** Fisher–Yates shuffle (returns the same array, shuffled in place). */
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+    return arr;
+  }
+
+  /** Build a deck of symbol pairs for the current difficulty. */
+  function buildDeck() {
+    const pairs = (cols * cols) / 2;
+    const chosen = SYMBOLS.slice(0, pairs);
+    deck = shuffle(chosen.concat(chosen).map(function (s, i) { return { id: i, sym: s }; }));
+  }
+
+  /** Render the board DOM from the current deck. */
+  function render() {
+    boardEl.className = "board " + (cols === 4 ? "easy" : "hard");
+    boardEl.innerHTML = "";
+    deck.forEach(function (c) {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.setAttribute("data-id", String(c.id));
+      card.innerHTML =
+        '<div class="card-inner">' +
+          '<div class="card-face card-back"></div>' +
+          '<div class="card-face card-front"><span class="emoji">' + c.sym + '</span></div>' +
+        '</div>';
+      card.addEventListener("click", function () { onCardClick(card, c); });
+      boardEl.appendChild(card);
+    });
+  }
+
+  /** Start the elapsed-time timer (first flip only). */
+  function startTimer() {
+    started = true;
+    startTime = Date.now();
+    timerId = setInterval(updateStatus, 250);
+  }
+
+  function stopTimer() {
+    if (timerId) { clearInterval(timerId); timerId = null; }
+  }
+
+  function elapsedSec() {
+    return started ? Math.floor((Date.now() - startTime) / 1000) : 0;
+  }
+
+  function fmt(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  function updateStatus() {
+    statusEl.textContent = "⏱ " + fmt(elapsedSec()) + " · 步数 " + moves;
+  }
+
+  /** Handle a card click. */
+  function onCardClick(card, c) {
+    if (lock) return;
+    if (card.classList.contains("flipped") || card.classList.contains("matched")) return;
+
+    card.classList.add("flipped");
+    sndFlip();
+    if (!started) startTimer();
+
+    flipped.push({ card: card, c: c });
+
+    if (flipped.length === 2) {
+      lock = true;            // lock all clicks during comparison
+      moves += 1;
+      const a = flipped[0];
+      const b = flipped[1];
+
+      if (a.c.sym === b.c.sym) {
+        sndMatch();
+        setTimeout(function () {
+          a.card.classList.add("matched");
+          b.card.classList.add("matched");
+          flipped = [];
+          matchedCount += 2;
+          lock = false;
+          updateStatus();
+          if (matchedCount === deck.length) win();
+        }, 320);
+      } else {
+        sndNoMatch();
+        setTimeout(function () {
+          a.card.classList.remove("flipped");
+          b.card.classList.remove("flipped");
+          flipped = [];
+          lock = false;
+        }, 800);
+      }
+    }
+  }
+
+  /** Victory: stop timer, show overlay, confetti + win sound. */
+  function win() {
+    stopTimer();
+    const sec = elapsedSec();
+    overlayTitle.textContent = "🎉 通关！用时 " + sec + " 秒 · " + moves + " 步";
+    overlay.hidden = false;
+    launchConfetti(["#4ade80", "#22d3ee", "#fbbf24", "#ffffff"]);
+    sndWin();
+  }
+
+  /** (Re)start a game at the current difficulty. */
+  function newGame() {
+    stopTimer();
+    started = false;
+    startTime = 0;
+    flipped = [];
+    matchedCount = 0;
+    moves = 0;
+    lock = false;
+    overlay.hidden = true;
+    buildDeck();
+    render();
+    updateStatus();
+  }
+
+  diffBtns.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const c = parseInt(btn.getAttribute("data-cols"), 10);
+      if (c === cols) return;
+      cols = c;
+      diffBtns.forEach(function (b) { b.classList.toggle("active", b === btn); });
+      newGame();
+    });
+  });
+
+  replayBtn.addEventListener("click", newGame);
+  againBtn.addEventListener("click", newGame);
+
+  newGame();
+})();
+</script>
+</body>
+</html>

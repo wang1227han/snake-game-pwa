@@ -9,8 +9,6 @@
   <meta name="apple-mobile-web-app-title" content="暗棋" />
   <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%20%22%E6%9A%97%E6%A3%8B%20Banqi%22%2C%20%22short_name%22%3A%20%22%E6%9A%97%E6%A3%8B%22%2C%20%22description%22%3A%20%22%E4%B8%AD%E5%9B%BD%E6%9A%97%E6%A3%8B%EF%BC%88%E7%9B%B2%E6%A3%8B%EF%BC%89%E5%8F%8C%E4%BA%BA%E7%83%AD%E5%BA%A7%22%2C%20%22start_url%22%3A%20%22.%22%2C%20%22display%22%3A%20%22standalone%22%2C%20%22background_color%22%3A%20%22%230b1020%22%2C%20%22theme_color%22%3A%20%22%230b1020%22%2C%20%22icons%22%3A%20%5B%7B%22src%22%3A%20%22data%3Aimage/svg%2Bxml%2C%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27192%27%20height%3D%27192%27%3E%3Crect%20width%3D%27192%27%20height%3D%27192%27%20rx%3D%2740%27%20fill%3D%27%230b1020%27/%3E%3Ctext%20x%3D%2796%27%20y%3D%27128%27%20font-size%3D%27110%27%20text-anchor%3D%27middle%27%20fill%3D%27%234ade80%27%20font-family%3D%27sans-serif%27%3E%E6%A3%8B%3C/text%3E%3C/svg%3E%22%2C%20%22sizes%22%3A%20%22192x192%22%2C%20%22type%22%3A%20%22image/svg%2Bxml%22%7D%5D%7D" />
   <title>暗棋 · Banqi</title>
-  <!-- 云服务 SDK（本地内置，避免外网 CDN 被拦截导致「SDK 未加载」）；若本地文件缺失会回退到 CDN -->
-  <script src="workbuddy-cloud-sdk.js" onerror="window.__wcsCdnFallback=true"></script>
   <style>
     :root {
       --bg-0: #0b1020;
@@ -66,6 +64,14 @@
       color: var(--text-1); font-size: 13px; text-decoration: none;
     }
     .back-link:hover { color: var(--text-0); }
+    .icon-btn {
+      width: 38px; height: 38px; border-radius: 10px; cursor: pointer; flex: none;
+      background: var(--panel); color: var(--text-1); border: 1px solid var(--panel-border);
+      font-size: 16px; display: inline-flex; align-items: center; justify-content: center;
+      transition: all 0.12s ease;
+    }
+    .icon-btn:hover { color: var(--text-0); border-color: var(--accent); }
+    .icon-btn:active { transform: scale(0.94); }
     .title { display: flex; align-items: baseline; gap: 8px; }
     .title h1 { font-size: 18px; font-weight: 700;
       background: linear-gradient(90deg, var(--accent), var(--accent-2));
@@ -108,17 +114,12 @@
     <!-- 开始 / 模式选择页 -->
     <div class="start" id="startScreen">
       <h1>🀄 暗棋 Banqi</h1>
-      <p class="sub">翻棋定阵营 · 双人博弈</p>
+      <p class="sub">翻棋定阵营 · 人机对战</p>
       <div class="mode-grid">
         <button class="mode-btn" id="btnLocal">
-          <span class="t">📱 单机模式</span>
-          <span class="d">同一台设备两人轮流操作（热座）。无需联网，即开即玩。</span>
+          <span class="t">🤖 人机对战</span>
+          <span class="d">你执红方先行，首翻定阵营，AI 执黑应对。无需联网，即开即玩。</span>
           <span class="go">开始 ▶</span>
-        </button>
-        <button class="mode-btn" id="btnOnline">
-          <span class="t">🌐 双人模式</span>
-          <span class="d">联机对战：建房或凭链接加入，两人不同设备实时同步（需云服务）。</span>
-          <span class="go">联机 ▶</span>
         </button>
       </div>
       <div class="note" id="startNote"></div>
@@ -128,22 +129,14 @@
     <div class="game" id="gameScreen">
       <div class="header">
         <a class="back-link" href="index.html">← 大厅</a>
-        <div class="title"><h1>暗棋</h1><span class="sub" id="modeTag">单机</span></div>
-        <span style="width:54px"></span>
+        <div class="title"><h1>暗棋</h1><span class="sub" id="modeTag">人机</span></div>
+        <button class="icon-btn" id="btnSound" title="音效">🔊</button>
       </div>
 
       <div class="turn-banner" id="turnBanner">准备中…</div>
 
       <div class="board-wrap">
         <canvas id="board"></canvas>
-      </div>
-
-      <div class="share" id="shareBox" style="display:none">
-        <div class="share-row">
-          <input id="shareInput" class="share-input" readonly />
-          <button class="btn ghost" id="copyLink">复制</button>
-        </div>
-        <div class="share-hint">把上面的链接发给好友，对方打开即可加入对战（房间号 <b id="roomCodeText"></b>）</div>
       </div>
 
       <div class="footer">
@@ -311,37 +304,27 @@
       const startScreen = document.getElementById("startScreen");
       const gameScreen = document.getElementById("gameScreen");
       const btnLocal = document.getElementById("btnLocal");
-      const btnOnline = document.getElementById("btnOnline");
       const startNote = document.getElementById("startNote");
       const canvas = document.getElementById("board");
       const ctx = canvas.getContext("2d");
       const turnBanner = document.getElementById("turnBanner");
       const modeTag = document.getElementById("modeTag");
       const hint = document.getElementById("hint");
-      const shareBox = document.getElementById("shareBox");
-      const shareInput = document.getElementById("shareInput");
-      const copyLink = document.getElementById("copyLink");
-      const roomCodeText = document.getElementById("roomCodeText");
+      const btnSound = document.getElementById("btnSound");
 
-      let mode = null;            // 'local' | 'online'
+      let mode = "ai";            // 'ai' 表示单机人机对战
       let board = makeInitialBoard();
       let assigned = false, toMove = null, selected = null;
       let gameOver = false, winner = null, lastMove = null;
-      let myColor = null;         // 联机模式下本机扮演的颜色
+      let humanColor = null, aiColor = null;   // 首翻后赋值，玩家 / AI 阵营
+      let muted = false;                       // 音效静音开关
       let particles = [], rafId = null;
       let dpr = 1, W = 0, H = 0, margin = 0, cellW = 0, cellH = 0;
-
-      // ---- 联机状态 ----
-      let cloud = null, roomCode = null, myToken = null, roomStatus = null, pollTimer = null, lastSynced = "";
-      const CLOUD_CONFIG = {
-        endpoint: "https://game-hall-06548.app.workbuddy.host",
-        oauthRelayBaseUrl: "https://www.workbuddy.cn/v2/as/genie-baas/oauth",
-        publishableKey: "wbpk_xDsasvippKoiMOy4Ag1M9Q_A8rs3NYRAaFPw88mfGDXvADwkNwoNA22"
-      };
 
       // ---- 音效 ----
       let audioCtx = null;
       function beep(freq, dur) {
+        if (muted) return;
         try {
           if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
           const o = audioCtx.createOscillator(), g = audioCtx.createGain();
@@ -462,30 +445,25 @@
 
       function setTurnBanner() {
         if (gameOver) {
-          if (mode === "online" && myColor) {
-            const won = (winner === myColor);
-            turnBanner.textContent = won ? "🎉 你赢了！" : "💀 你输了";
-            turnBanner.className = "turn-banner " + (won ? "win" : "lose");
-          } else if (winner === RED) { turnBanner.textContent = "🎉 红方胜！"; turnBanner.className = "turn-banner win"; }
-          else if (winner === BLACK) { turnBanner.textContent = "🎉 黑方胜！"; turnBanner.className = "turn-banner win"; }
-          else { turnBanner.textContent = "🤝 平局"; turnBanner.className = "turn-banner"; }
+          const won = (winner === humanColor);
+          turnBanner.textContent = won ? "🎉 你赢了！" : "💀 AI 获胜";
+          turnBanner.className = "turn-banner " + (won ? "win" : "lose");
           return;
         }
-        if (mode === "online" && myColor) {
-          if (roomStatus === "waiting") {
-            turnBanner.textContent = "⏳ 等待对方加入…把链接发给他";
-            turnBanner.className = "turn-banner " + (myColor === RED ? "red" : "black");
-            return;
-          }
-          const mine = (toMove === myColor);
-          const side = (myColor === RED ? "红方" : "黑方");
-          turnBanner.textContent = mine ? ("👇 到你了（" + side + "），该走棋！") : ("⏳ 等待对方（" + side + "）走棋…");
-          turnBanner.className = "turn-banner " + (toMove === RED ? "red" : "black") + (mine ? " you" : "");
+        if (!assigned) {
+          turnBanner.textContent = "🔴 揭幕战：点任意暗棋翻面，翻出的颜色即你的阵营";
+          turnBanner.className = "turn-banner red";
           return;
         }
-        const red = toMove === RED;
-        turnBanner.textContent = (red ? "🔴 红方回合" : "⚫ 黑方回合") + (selected ? " · 已选中，黄圈可吃/绿点可走" : " · 点暗棋翻面或点己方棋子");
-        turnBanner.className = "turn-banner " + (red ? "red" : "black");
+        const mine = (toMove === humanColor);
+        const side = (toMove === RED ? "红方" : "黑方");
+        if (mine) {
+          turnBanner.textContent = "👇 你的回合（" + side + "），翻棋或走子";
+          turnBanner.className = "turn-banner " + (toMove === RED ? "red" : "black") + " you";
+        } else {
+          turnBanner.textContent = "🤖 AI 思考中…（" + side + "）";
+          turnBanner.className = "turn-banner " + (toMove === RED ? "red" : "black");
+        }
       }
 
       // ---- 处理一次行动（本地 / 联机共用的纯逻辑）----
@@ -495,6 +473,7 @@
         if (!assigned) {
           if (cell && !cell.faceUp) {
             flip(board, r, c); sndFlip(); assigned = true;
+            humanColor = cell.color; aiColor = (cell.color === RED) ? BLACK : RED;
             toMove = (cell.color === RED) ? BLACK : RED;
             selected = null; lastMove = { r, c }; draw(); return true;
           }
@@ -520,32 +499,102 @@
         else { selected = null; draw(); setTurnBanner(); return false; }
       }
 
-      // 回合推进 + 负方无子可动判定（本地模式用）
-      function advanceTurnLocal() {
-        toMove = (toMove === RED) ? BLACK : RED;
-        if (!hasAnyLegalAction(board, toMove)) {
-          gameOver = true; winner = (toMove === RED) ? BLACK : RED; sndWin(); spawnBurst(winner); animate();
-        }
-        setTurnBanner();
-      }
-
       function handleCell(r, c) {
         if (gameOver) return;
-        if (mode === "online") {
-          // 联机：等待对方加入、或不是你的回合，均忽略点击
-          if (roomStatus !== "playing" || toMove !== myColor) return;
-          const res = performAction(r, c);
-          if (res === false) return;
-          if (res === "win") { stopPolling(); commitState(); return; }
-          toMove = (toMove === RED) ? BLACK : RED;
-          if (!hasAnyLegalAction(board, toMove)) {
-            gameOver = true; winner = (toMove === RED) ? BLACK : RED; sndWin(); spawnBurst(winner); animate();
-          }
-          setTurnBanner(); commitState();
-          return;
-        }
+        if (toMove !== humanColor) return;           // 非玩家回合忽略
+        const wasAssigned = assigned;
         const res = performAction(r, c);
-        if (res === true) advanceTurnLocal();
+        if (res === "win") return;                    // 已结束
+        if (res === true) {
+          // 首翻（wasAssigned 为 false）时 performAction 已把 toMove 设为 aiColor，不要再翻转；
+          // 之后的行动（走子/再翻）才切换行棋方。
+          if (wasAssigned) toMove = (toMove === RED) ? BLACK : RED;
+          if (!hasAnyLegalAction(board, toMove)) {     // 对方无子可动 -> 玩家胜
+            gameOver = true; winner = (toMove === RED) ? BLACK : RED; sndWin(); spawnBurst(winner); animate(); setTurnBanner(); return;
+          }
+          setTurnBanner();
+          if (toMove === aiColor) scheduleAI();        // 轮到 AI
+        }
+        // res === false 仅选择变化，不做回合推进
+      }
+
+      // ====================== AI 逻辑 ======================
+      function scheduleAI() {
+        if (gameOver) return;
+        setTurnBanner();                               // 显示「AI 思考中」
+        setTimeout(aiTakeTurn, 550);
+      }
+      // 执行 AI 选定的行动：翻暗棋，或「选子 + 走子」两步
+      function performAiAction(action) {
+        if (action.from) {
+          performAction(action.from.r, action.from.c);   // 选中己方棋子（返回 false，忽略）
+          return performAction(action.to.r, action.to.c); // 落子 / 吃子（返回 true 或 'win'）
+        }
+        return performAction(action.r, action.c);         // 翻暗棋
+      }
+      function aiTakeTurn() {
+        if (gameOver || toMove !== aiColor) return;
+        const wasAssigned = assigned;
+        const action = aiChooseAction();
+        if (!action) {                                 // 理论上不会发生
+          gameOver = true; winner = humanColor; sndWin(); spawnBurst(winner); animate(); setTurnBanner(); return;
+        }
+        const res = performAiAction(action);
+        if (res === "win") return;
+        if (res === true) {
+          if (wasAssigned) toMove = (toMove === RED) ? BLACK : RED;
+          if (!hasAnyLegalAction(board, toMove)) { gameOver = true; winner = (toMove === RED) ? BLACK : RED; sndWin(); spawnBurst(winner); animate(); setTurnBanner(); return; }
+          setTurnBanner();
+        }
+      }
+      const PIECE_VALUE = { general:1000, chariot:90, cannon:70, horse:60, elephant:30, advisor:20, soldier:10 };
+      function countFaceUp(b, color) {
+        let n = 0;
+        for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+          const p = b[r][c]; if (p && p.faceUp && p.color === color) n++;
+        }
+        return n;
+      }
+      function isSquareAttackedBy(b, tr, tc, byColor) {
+        for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+          const p = b[r][c];
+          if (!p || !p.faceUp || p.color !== byColor) continue;
+          if (pieceMoveTargets(b, r, c).some(([a, d]) => a === tr && d === tc)) return true;
+        }
+        return false;
+      }
+      function aiChooseAction() {
+        const me = aiColor, opp = (me === RED) ? BLACK : RED;
+        let best = null, bestScore = -Infinity;
+        // 1) 走子 / 吃子
+        for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+          const p = board[r][c];
+          if (!p || !p.faceUp || p.color !== me) continue;
+          for (const [tr, tc] of pieceMoveTargets(board, r, c)) {
+            const tcell = board[tr][tc];
+            const captured = (tcell && tcell.faceUp) ? tcell : null;
+            let score;
+            if (captured && captured.type === "general") score = 100000;        // 吃将直接获胜
+            else if (captured) score = 800 + (PIECE_VALUE[captured.type] || 0) * 10 - (PIECE_VALUE[p.type] || 0);
+            else score = 40 + Math.random() * 30;                              // 普通走子
+            if (!captured || captured.type !== "general") {
+              if (isSquareAttackedBy(board, tr, tc, opp)) score -= 300;         // 走进会被反吃的格子，扣分
+            }
+            if (score > bestScore) { bestScore = score; best = { from: { r, c }, to: { r: tr, c: tc } }; }
+          }
+        }
+        // 2) 翻暗棋（没有好棋可吃、或己方明棋很少时）
+        const myCount = countFaceUp(board, me);
+        if (bestScore < 500) {
+          const fds = [];
+          for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++)
+            if (board[r][c] && !board[r][c].faceUp) fds.push({ r, c });
+          if (fds.length) {
+            const flipScore = (myCount < 4 ? 350 : 120) + Math.random() * 60;
+            if (flipScore > bestScore) { bestScore = flipScore; best = fds[Math.floor(Math.random() * fds.length)]; }
+          }
+        }
+        return best;
       }
 
       function getCellFromEvent(evt) {
@@ -562,204 +611,36 @@
 
       document.getElementById("restart").addEventListener("click", backToStart);
       document.getElementById("backToStart").addEventListener("click", backToStart);
-      copyLink.addEventListener("click", () => {
-        const v = shareInput.value;
-        const done = () => { copyLink.textContent = "已复制"; setTimeout(() => (copyLink.textContent = "复制"), 1500); };
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(v).then(done).catch(() => { shareInput.select(); try { document.execCommand("copy"); } catch (e) {} done(); });
-        } else { shareInput.select(); try { document.execCommand("copy"); } catch (e) {} done(); }
-      });
       window.addEventListener("resize", resizeCanvas);
 
-      // ====================== 联机（云服务）======================
-      function initCloud() {
-        if (typeof WorkBuddyCloud === "undefined") return false;
-        if (!cloud) {
-          cloud = WorkBuddyCloud.createWorkBuddyCloud({
-            endpoint: CLOUD_CONFIG.endpoint,
-            oauthRelayBaseUrl: CLOUD_CONFIG.oauthRelayBaseUrl,
-            publishableKey: CLOUD_CONFIG.publishableKey
-          });
-        }
-        return true;
-      }
-      // 确保 SDK 就绪：本地文件优先，缺失时回退到 CDN（仍需联网）
-      function ensureCloud() {
-        if (typeof WorkBuddyCloud !== "undefined") { initCloud(); return Promise.resolve(true); }
-        return new Promise(function (resolve) {
-          var s = document.createElement("script");
-          s.src = "https://cdn.jsdelivr.net/npm/@tencent-ai/workbuddy-cloud-sdk@dev/lib/index.global.js";
-          s.onload = function () { initCloud(); resolve(typeof WorkBuddyCloud !== "undefined"); };
-          s.onerror = function () { resolve(false); };
-          document.head.appendChild(s);
-        });
-      }
-      function getMyToken() {
-        let t = sessionStorage.getItem("anqi_token");
-        if (!t) { t = Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem("anqi_token", t); }
-        return t;
-      }
-      function genCode() {
-        const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; let s = "";
-        for (let i = 0; i < 6; i++) s += a[Math.floor(Math.random() * a.length)];
-        return s;
-      }
-      function serializeState(b, turn, status, winner) {
-        const flat = [];
-        for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-          const p = b[r][c]; flat.push(p ? { c: p.color, t: p.type, f: p.faceUp } : null);
-        }
-        return { board: flat, turn, status, winner };
-      }
-      function deserializeState(s) {
-        const b = []; let k = 0;
-        for (let r = 0; r < ROWS; r++) {
-          const row = [];
-          for (let c = 0; c < COLS; c++) {
-            const p = s.board[k++]; row.push(p ? { color: p.c, type: p.t, faceUp: p.f } : null);
-          }
-          b.push(row);
-        }
-        return b;
-      }
-      function showShare() {
-        const link = location.origin + location.pathname + "?room=" + roomCode;
-        shareBox.style.display = "block"; shareInput.value = link;
-        if (roomCodeText) roomCodeText.textContent = roomCode;
-      }
-      function hideShare() { shareBox.style.display = "none"; }
-
-      async       function createRoom() {
-        myToken = getMyToken(); roomCode = genCode();
-        board = makeInitialBoard();
-        const state = serializeState(board, RED, "waiting", 0);
-        const { error } = await cloud.database.from("anqi_rooms")
-          .insert({ code: roomCode, state, red: myToken, black: null }).select();
-        if (error) {
-          const msg = (error.message || error.code || "网络/权限错误");
-          startNote.textContent = "创建房间失败：" + msg + "（若提示来源/权限被拒，请通过本应用的发布地址打开本页，而非 GitHub Pages 直链）";
-          return;
-        }
-        myColor = RED; roomStatus = "waiting"; assigned = true;
-        toMove = RED; gameOver = false; winner = null; selected = null; lastMove = null; particles = [];
-        history.replaceState(null, "", "?room=" + roomCode);
-        enterOnlineGame(); showShare(); startPolling();
-      }
-
-      async function joinRoom(code) {
-        myToken = getMyToken(); roomCode = code;
-        const { data, error } = await cloud.database.from("anqi_rooms")
-          .select("*").eq("code", code).maybeSingle();
-        if (error) { startNote.textContent = "加入失败：" + (error.message || error.code); return; }
-        if (!data) { startNote.textContent = "房间不存在或已失效：" + code; return; }
-        const s = data.state;
-        if (data.red === myToken) { myColor = RED; }
-        else if (data.black === myToken) { myColor = BLACK; }
-        else if (s.status === "waiting" && !data.black) {
-          const ns = Object.assign({}, s, { status: "playing" });
-          const upd = await cloud.database.from("anqi_rooms")
-            .update({ black: myToken, state: ns }).eq("code", code).eq("black", null).select();
-          if (upd.error) { startNote.textContent = "加入失败：" + (upd.error.message || upd.error.code); return; }
-          myColor = BLACK;
-        } else if (s.status === "playing") { startNote.textContent = "房间已满（" + code + "），无法加入。"; return; }
-        else { startNote.textContent = "房间状态异常。"; return; }
-        board = deserializeState(s);
-        toMove = s.turn;
-        roomStatus = (myColor === BLACK) ? "playing" : s.status;
-        gameOver = s.status === "finished"; winner = s.winner || null;
-        assigned = true; selected = null; lastMove = null; particles = [];
-        enterOnlineGame(); hideShare(); startPolling();
-      }
-
-      function startPolling() { stopPolling(); pollTimer = setInterval(pollRoom, 1000); pollRoom(); }
-      function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
-
-      async function pollRoom() {
-        if (!roomCode) return;
-        const { data, error } = await cloud.database.from("anqi_rooms")
-          .select("*").eq("code", roomCode).maybeSingle();
-        if (error || !data) return;
-        const s = data.state;
-        const sig = JSON.stringify(s);
-        if (sig === lastSynced) return;
-        lastSynced = sig;
-        board = deserializeState(s);
-        toMove = s.turn; roomStatus = s.status; selected = null;
-        if (s.status === "finished") {
-          gameOver = true; winner = s.winner || null;
-          if (winner) { spawnBurst(winner); animate(); }
-          setTurnBanner(); stopPolling();
-        } else {
-          gameOver = false; winner = null; setTurnBanner();
-        }
-      }
-
-      function commitState() {
-        if (mode !== "online" || !roomCode) return Promise.resolve();
-        const status = gameOver ? "finished" : "playing";
-        const state = serializeState(board, toMove, status, winner || 0);
-        lastSynced = JSON.stringify(state);
-        let attempts = 0;
-        function attempt() {
-          return cloud.database.from("anqi_rooms").update({ state, status })
-            .eq("code", roomCode).select().then(({ error }) => {
-              if (error) { if (attempts < 3) { attempts++; return new Promise(r => setTimeout(r, 400)).then(attempt); } lastSynced = ""; }
-            });
-        }
-        return attempt();
-      }
-
-      function enterOnlineGame() {
-        mode = "online"; modeTag.textContent = "联机";
-        hint.textContent = "联机对战：轮到你时会有「到你了」提示；吃掉对方将/帅即胜。游戏结束点「再玩一局」可返回重新匹配。";
-        startScreen.style.display = "none"; gameScreen.style.display = "block";
-        resizeCanvas();
-      }
-
-      function startOnline() {
-        ensureCloud().then(function (ok) {
-          if (!ok) {
-            startNote.textContent = "⚠️ 云服务 SDK 未能加载（本地文件与 CDN 均失败）。请确认 workbuddy-cloud-sdk.js 与本页在同一目录，或联网后刷新重试。";
-            return;
-          }
-          const rc = new URLSearchParams(location.search).get("room");
-          if (rc && !roomCode) joinRoom(rc.trim().toUpperCase());
-          else createRoom();
-        });
-      }
-
       // ====================== 本地模式 / 返回 ======================
-      function resetOnlineVars() { roomCode = null; myColor = null; roomStatus = null; lastSynced = ""; myToken = null; }
 
       function newLocalGame() {
         board = makeInitialBoard(); assigned = false; toMove = null; selected = null;
-        gameOver = false; winner = null; lastMove = null; particles = []; myColor = null;
+        gameOver = false; winner = null; lastMove = null; particles = [];
+        humanColor = null; aiColor = null;
         draw(); setTurnBanner();
       }
 
       function startLocal() {
-        stopPolling(); resetOnlineVars();
-        mode = "local"; modeTag.textContent = "单机";
-        hint.textContent = "双人热座：首翻定阵营，之后轮流「翻棋」或「走子」。选中棋子会亮出可走位置（绿点=可走，黄圈=可吃）。吃掉对方将/帅即胜；无子可动者负。";
+        mode = "ai"; modeTag.textContent = "人机";
+        hint.textContent = "人机对战：你执红方先行，点暗棋翻面定阵营；之后轮流翻棋或走子，AI 执黑应对。吃掉对方将/帅即胜；无子可动者负。";
         startScreen.style.display = "none"; gameScreen.style.display = "block";
         newLocalGame(); resizeCanvas();
       }
 
-      // 返回「选择页」（即匹配页），并清理联机状态与 URL 房间号
+      // 返回「选择页」，清理动画与 URL
       function backToStart() {
         if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-        stopPolling(); resetOnlineVars(); hideShare();
         mode = null; gameScreen.style.display = "none"; startScreen.style.display = "block";
         startNote.textContent = "";
         history.replaceState(null, "", location.pathname);
       }
 
       btnLocal.addEventListener("click", startLocal);
-      btnOnline.addEventListener("click", startOnline);
-
-      // 通过链接直接加入：打开带 ?room= 的页面自动进入对战
-      const _initRoom = new URLSearchParams(location.search).get("room");
-      if (_initRoom) startOnline();
+      btnSound.addEventListener("click", function () {
+        muted = !muted; btnSound.textContent = muted ? "🔇" : "🔊";
+      });
     }
 
     if (typeof module !== "undefined" && module.exports) {

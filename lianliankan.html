@@ -523,7 +523,7 @@
       let rows = 0, cols = 0;
       let grid = [];
       let tiles = [];
-      let idToPath = {};
+      let idToPath = {}, idToPathRev = {};
       let tileEls = [];
       let imgEls = [];
       let sel = null;
@@ -658,8 +658,10 @@
         const flat = makeBoardPairs(pool, pairs);
 
         idToPath = {};
+        idToPathRev = {};
         let nextId = 1;
         for (const p of flat) if (!(p in idToPath)) idToPath[p] = nextId++;
+        for (const p in idToPath) idToPathRev[idToPath[p]] = p;
 
         grid = makeGrid(rows, cols);
         tiles = [];
@@ -716,7 +718,7 @@
             const v = grid[i + 1][j + 1];
             const tile = tileEls[i][j];
             if (v > 0) {
-              const path = idToPath[v];
+              const path = idToPathRev[v];
               tiles[i][j] = path;
               tile.classList.remove("empty", "sel", "hint", "pop");
               if (imgEls[i][j].src.indexOf(path) === -1) imgEls[i][j].src = path;

@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="21点" />
+  <title>21点 · Blackjack</title>
+  <style>
+    :root {
+      --bg-0: #0b1020; --panel: rgba(255,255,255,0.04); --panel-border: rgba(255,255,255,0.08);
+      --text-0: #e8ecf5; --text-1: #9aa6c4; --accent: #4ade80; --accent-2: #22d3ee; --danger: #f87171;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body { min-height: 100%; display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(1200px 800px at 50% -10%, #1a2440, var(--bg-0));
+      color: var(--text-0);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      padding: 14px; }
+    .app { width: 100%; max-width: 460px; }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .back-link { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 10px;
+      border: 1px solid var(--panel-border); background: var(--panel); color: var(--text-1); font-size: 13px; text-decoration: none; }
+    .back-link:hover { color: var(--text-0); }
+    .sound-toggle { width: 38px; height: 38px; border-radius: 10px; cursor: pointer; border: 1px solid var(--panel-border);
+      background: var(--panel); color: var(--text-0); font-size: 18px; line-height: 1;
+      display: inline-flex; align-items: center; justify-content: center; transition: all .12s ease; }
+    .sound-toggle:hover { color: var(--accent); border-color: rgba(255,255,255,0.18); }
+    .title { display: flex; align-items: baseline; gap: 8px; }
+    .title h1 { font-size: 20px; font-weight: 700; background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .title .sub { font-size: 12px; color: var(--text-1); }
+    .btn { padding: 10px 22px; border-radius: 12px; cursor: pointer; border: none;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #06121f; font-weight: 700; font-size: 15px; }
+    .panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 14px; padding: 12px; }
+    #fx { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 60; }
+
+    /* ===== Game-specific styles (built on the shared suite) ===== */
+    .area-label { font-size: 13px; color: var(--text-1); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+    .pts { color: var(--text-0); font-weight: 700; }
+    .cards { display: flex; gap: 8px; min-height: 84px; flex-wrap: wrap; align-content: flex-start; }
+    .card {
+      width: 58px; height: 84px; border-radius: 10px; background: #fff; position: relative; flex: none;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.35);
+    }
+    .card .corner {
+      position: absolute; top: 5px; left: 7px; font-size: 15px; font-weight: 700; line-height: 1;
+    }
+    .card .corner.br {
+      top: auto; left: auto; bottom: 5px; right: 7px; transform: rotate(180deg);
+    }
+    .card .suit {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 30px;
+    }
+    .card.back {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border: 2px solid rgba(255,255,255,0.25);
+    }
+    .card.back::after {
+      content: ""; position: absolute; inset: 8px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.35);
+    }
+    .dealer-panel { margin-bottom: 10px; }
+    .player-panel { margin-top: 10px; }
+    .status {
+      text-align: center; margin: 10px 0; font-size: 14px; min-height: 20px;
+      color: var(--text-0); font-weight: 600;
+    }
+    .status.win { color: var(--accent); }
+    .status.lose { color: var(--danger); }
+    .status.push { color: var(--text-1); }
+    .controls { margin-top: 12px; }
+    .balance-row {
+      display: flex; justify-content: space-between; font-size: 14px; color: var(--text-1); margin-bottom: 10px;
+    }
+    .balance-row b { color: var(--text-0); font-size: 16px; }
+    .bet-controls { display: flex; gap: 10px; justify-content: center; }
+    .mini {
+      flex: 1; max-width: 140px; padding: 9px 4px; border-radius: 10px; cursor: pointer;
+      border: 1px solid var(--panel-border); background: var(--panel);
+      color: var(--text-0); font-size: 15px; font-weight: 700;
+      transition: all 0.12s ease;
+    }
+    .mini:hover:not(:disabled) { color: var(--accent); border-color: rgba(255,255,255,0.18); }
+    .actions { display: flex; gap: 8px; margin-top: 12px; }
+    .actions .btn { flex: 1; padding: 11px 6px; font-size: 14px; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    @media (max-width: 380px) {
+      .card { width: 50px; height: 72px; }
+      .cards { min-height: 72px; }
+      .card .suit { font-size: 26px; }
+      .actions .btn { font-size: 13px; padding: 10px 4px; }
+    }
+    @media (max-height: 720px) {
+      body { align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <a class="back-link" href="index.html">← 大厅</a>
+      <div class="title"><h1>21点</h1><span class="sub">BLACKJACK</span></div>
+      <button class="sound-toggle" id="btn-sound" title="音效开关">🔊</button>
+    </div>
+    <canvas id="fx"></canvas>
+
+    <div class="panel dealer-panel">
+      <div class="area-label">庄家 <span id="dealer-pts" class="pts"></span></div>
+      <div id="dealer-cards" class="cards"></div>
+    </div>
+
+    <div id="status" class="status">点击「新局」开始（下注 10）</div>
+
+    <div class="panel player-panel">
+      <div class="area-label">玩家 <span id="player-pts" class="pts"></span></div>
+      <div id="player-cards" class="cards"></div>
+    </div>
+
+    <div class="panel controls">
+      <div class="balance-row">
+        <span>余额：<b id="balance">100</b></span>
+        <span>下注：<b id="bet">10</b></span>
+      </div>
+      <div class="bet-controls" id="bet-controls">
+        <button class="mini" id="bet-minus">−5</button>
+        <button class="mini" id="bet-plus">+5</button>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn" id="btn-hit">要牌</button>
+      <button class="btn" id="btn-stand">停牌</button>
+      <button class="btn" id="btn-double">加倍</button>
+      <button class="btn" id="btn-new">新局</button>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    "use strict";
+
+    // ===================== Shared audio & fx suite (verbatim) =====================
+    let audioCtx = null, muted = false;
+    function ac() {
+      if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audioCtx = null; } }
+      if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+      return audioCtx;
+    }
+    function tone(freq, dur, type, vol) {
+      if (muted) return; const a = ac(); if (!a) return;
+      const o = a.createOscillator(), g = a.createGain();
+      o.type = type || "sine"; o.frequency.value = freq;
+      const now = a.currentTime; g.gain.setValueAtTime(vol || 0.12, now);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      o.connect(g); g.connect(a.destination); o.start(now); o.stop(now + dur + 0.02);
+    }
+    function sndDeal(){ tone(420,0.08,"triangle",0.10); }
+    function sndWin(){ [523,659,784,1046].forEach((f,i)=>setTimeout(()=>tone(f,0.18,"sine",0.14),i*90)); }
+    function sndLose(){ [392,330,262].forEach((f,i)=>setTimeout(()=>tone(f,0.22,"sawtooth",0.10),i*120)); }
+    function sndBust(){ tone(150,0.3,"square",0.12); }
+    const fxCanvas = document.getElementById("fx");
+    const fxCtx = fxCanvas.getContext("2d");
+    let fxParticles = [], fxRAF = null, dpr = window.devicePixelRatio || 1;
+    function resizeFx(){ fxCanvas.width = window.innerWidth*dpr; fxCanvas.height = window.innerHeight*dpr; fxCtx.setTransform(dpr,0,0,dpr,0,0); }
+    function launchConfetti(colors){
+      const W = window.innerWidth, H = window.innerHeight; fxParticles = [];
+      for (let i=0;i<130;i++){ fxParticles.push({ x:Math.random()*W, y:-20-Math.random()*H*0.35,
+        vx:(Math.random()-0.5)*4, vy:2+Math.random()*4, rot:Math.random()*Math.PI*2, vr:(Math.random()-0.5)*0.3,
+        size:4+Math.random()*5, col:colors[Math.floor(Math.random()*colors.length)] }); }
+      if (fxRAF) cancelAnimationFrame(fxRAF); fxLoop();
+    }
+    function fxLoop(){
+      const W = window.innerWidth, H = window.innerHeight; fxCtx.clearRect(0,0,W,H); let alive=false;
+      for (const p of fxParticles){ p.x+=p.vx; p.y+=p.vy; p.vy+=0.05; p.rot+=p.vr;
+        if (p.y < H+30) alive=true; fxCtx.save(); fxCtx.translate(p.x,p.y); fxCtx.rotate(p.rot);
+        fxCtx.fillStyle=p.col; fxCtx.fillRect(-p.size/2,-p.size/2,p.size,p.size*0.6); fxCtx.restore(); }
+      if (alive) fxRAF = requestAnimationFrame(fxLoop); else { fxParticles=[]; fxCtx.clearRect(0,0,W,H); }
+    }
+    const btnSound = document.getElementById("btn-sound");
+    btnSound.addEventListener("click", function(){ muted=!muted; btnSound.textContent = muted?"🔇":"🔊"; if(!muted) ac(); });
+    resizeFx(); window.addEventListener("resize", resizeFx);
+
+    // ===================== Blackjack game =====================
+    const SUITS = [
+      { s: "♠", color: "#1a2238" },
+      { s: "♥", color: "#e23b3b" },
+      { s: "♦", color: "#e23b3b" },
+      { s: "♣", color: "#1a2238" }
+    ];
+    const RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+
+    let balance = 100;
+    let bet = 10;
+    let deck = [];
+    let player = [];
+    let dealer = [];
+    let phase = "bet";      // "bet" | "player" | "done"
+    let wager = 0;
+    let playerBJ = false;
+    let dealerBJ = false;
+    let lastBust = false;
+
+    const elBalance = document.getElementById("balance");
+    const elBet = document.getElementById("bet");
+    const elDealerCards = document.getElementById("dealer-cards");
+    const elPlayerCards = document.getElementById("player-cards");
+    const elDealerPts = document.getElementById("dealer-pts");
+    const elPlayerPts = document.getElementById("player-pts");
+    const elStatus = document.getElementById("status");
+    const elBetControls = document.getElementById("bet-controls");
+    const btnHit = document.getElementById("btn-hit");
+    const btnStand = document.getElementById("btn-stand");
+    const btnDouble = document.getElementById("btn-double");
+    const btnNew = document.getElementById("btn-new");
+    const btnBetMinus = document.getElementById("bet-minus");
+    const btnBetPlus = document.getElementById("bet-plus");
+
+    function buildDeck() {
+      const d = [];
+      for (const suit of SUITS) {
+        for (const rank of RANKS) {
+          let val;
+          if (rank === "A") val = 11;
+          else if (rank === "K" || rank === "Q" || rank === "J") val = 10;
+          else val = parseInt(rank, 10);
+          d.push({ rank: rank, suit: suit.s, color: suit.color, val: val });
+        }
+      }
+      return d;
+    }
+
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+      }
+      return arr;
+    }
+
+    // Best value: A counts 11, reduced to 1 while busting. Returns {total, soft}.
+    function handValue(cards) {
+      let total = 0, aces = 0;
+      for (const c of cards) {
+        total += c.val;
+        if (c.rank === "A") aces++;
+      }
+      while (total > 21 && aces > 0) { total -= 10; aces--; }
+      return { total: total, soft: aces > 0 };
+    }
+
+    function draw() {
+      if (deck.length === 0) deck = shuffle(buildDeck());
+      return deck.pop();
+    }
+
+    function renderCard(card, faceDown) {
+      const div = document.createElement("div");
+      div.className = "card" + (faceDown ? " back" : "");
+      if (!faceDown) {
+        const corner = document.createElement("div");
+        corner.className = "corner";
+        corner.textContent = card.rank;
+        corner.style.color = card.color;
+        const cornerBR = document.createElement("div");
+        cornerBR.className = "corner br";
+        cornerBR.textContent = card.rank;
+        cornerBR.style.color = card.color;
+        const suit = document.createElement("div");
+        suit.className = "suit";
+        suit.textContent = card.suit;
+        suit.style.color = card.color;
+        div.appendChild(corner);
+        div.appendChild(cornerBR);
+        div.appendChild(suit);
+      }
+      return div;
+    }
+
+    function renderHands() {
+      // Dealer
+      elDealerCards.innerHTML = "";
+      dealer.forEach(function (c, idx) {
+        const hidden = (phase === "player") && idx === 1; // hole card hidden during play
+        elDealerCards.appendChild(renderCard(c, hidden));
+      });
+      if (phase === "done") {
+        const dv = handValue(dealer);
+        elDealerPts.textContent = "（" + dv.total + (dv.soft ? " 软" : "") + "）";
+      } else if (dealer.length > 0) {
+        elDealerPts.textContent = "（" + dealer[0].val + " + ?）";
+      } else {
+        elDealerPts.textContent = "";
+      }
+      // Player
+      elPlayerCards.innerHTML = "";
+      player.forEach(function (c) { elPlayerCards.appendChild(renderCard(c, false)); });
+      if (player.length > 0) {
+        const pv = handValue(player);
+        elPlayerPts.textContent = "（" + pv.total + (pv.soft ? " 软" : "") + "）";
+      } else {
+        elPlayerPts.textContent = "";
+      }
+    }
+
+    function setStatus(text, cls) {
+      elStatus.textContent = text;
+      elStatus.className = "status" + (cls ? " " + cls : "");
+    }
+
+    function updateControls() {
+      elBalance.textContent = balance;
+      elBet.textContent = bet;
+      const betVisible = (phase === "bet" || phase === "done");
+      elBetControls.style.display = betVisible ? "flex" : "none";
+      btnBetMinus.disabled = !(betVisible && bet > 5);
+      btnBetPlus.disabled = !(betVisible && bet + 5 <= balance);
+      const playing = (phase === "player");
+      btnHit.disabled = !playing;
+      btnStand.disabled = !playing;
+      btnDouble.disabled = !(playing && player.length === 2 && balance >= bet);
+    }
+
+    function startRound() {
+      if (phase !== "bet" && phase !== "done") return;
+      // Reset when funds can no longer cover the minimum bet
+      if (balance < 5) { balance = 100; bet = 10; }
+      if (bet > balance) bet = balance;
+      if (bet < 5) bet = 5;
+
+      player = [];
+      dealer = [];
+      deck = shuffle(buildDeck());
+      wager = bet;
+      balance -= wager;
+      lastBust = false;
+      playerBJ = false;
+      dealerBJ = false;
+
+      // Deal order: player, dealer(up), player, dealer(hole)
+      player.push(draw());
+      dealer.push(draw());
+      player.push(draw());
+      dealer.push(draw());
+
+      const pv = handValue(player);
+      const dv = handValue(dealer);
+      playerBJ = (player.length === 2 && pv.total === 21);
+      dealerBJ = (dealer.length === 2 && dv.total === 21);
+
+      phase = "player";
+      renderHands();
+      updateControls();
+      for (let i = 0; i < 4; i++) { setTimeout(sndDeal, i * 90); }
+
+      if (playerBJ || dealerBJ) {
+        phase = "done";
+        renderHands();
+        setTimeout(resolve, 350);
+        return;
+      }
+      setStatus("你的回合：要牌或停牌");
+    }
+
+    function hit() {
+      if (phase !== "player") return;
+      player.push(draw());
+      sndDeal();
+      const pv = handValue(player);
+      renderHands();
+      if (pv.total > 21) {
+        lastBust = true;
+        sndBust();
+        phase = "done";
+        resolve();
+        return;
+      }
+      updateControls();
+      setStatus("你的回合：要牌或停牌（当前 " + pv.total + (pv.soft ? " 软" : "") + "）");
+    }
+
+    function stand() {
+      if (phase !== "player") return;
+      dealerPlay();
+    }
+
+    function doubleDown() {
+      if (phase !== "player" || player.length !== 2 || balance < bet) return;
+      balance -= bet;
+      wager += bet;
+      player.push(draw());
+      sndDeal();
+      const pv = handValue(player);
+      renderHands();
+      updateControls();
+      if (pv.total > 21) {
+        lastBust = true;
+        sndBust();
+        phase = "done";
+        resolve();
+        return;
+      }
+      dealerPlay();
+    }
+
+    function dealerPlay() {
+      phase = "done";
+      renderHands(); // reveal hole card
+      let dv = handValue(dealer);
+      if (dv.total >= 17) {
+        setTimeout(resolve, 350);
+        return;
+      }
+      function step() {
+        dealer.push(draw());
+        sndDeal();
+        dv = handValue(dealer);
+        renderHands();
+        if (dv.total < 17) {
+          setTimeout(step, 450);
+        } else {
+          setTimeout(resolve, 350);
+        }
+      }
+      setTimeout(step, 450);
+    }
+
+    function resolve() {
+      phase = "done";
+      const pv = handValue(player);
+      const dv = handValue(dealer);
+      let result, msg, cls;
+
+      if (playerBJ && dealerBJ) {
+        result = "push"; msg = "平局（双方黑杰克）"; cls = "push";
+      } else if (playerBJ) {
+        result = "blackjack"; msg = "黑杰克！+" + Math.floor(wager * 1.5); cls = "win";
+      } else if (dealerBJ) {
+        result = "lose"; msg = "庄家黑杰克，你输了 -" + wager; cls = "lose";
+      } else if (pv.total > 21) {
+        result = "lose"; msg = "爆牌！你输了 -" + wager; cls = "lose";
+      } else if (dv.total > 21) {
+        result = "win"; msg = "庄家爆牌，你赢了 +" + wager; cls = "win";
+      } else if (pv.total > dv.total) {
+        result = "win"; msg = "你赢了 +" + wager; cls = "win";
+      } else if (pv.total < dv.total) {
+        result = "lose"; msg = "你输了 -" + wager; cls = "lose";
+      } else {
+        result = "push"; msg = "平局"; cls = "push";
+      }
+
+      if (result === "blackjack") {
+        balance += wager + Math.floor(wager * 1.5);
+        sndWin();
+        launchConfetti(['#4ade80', '#22d3ee', '#fbbf24', '#ffffff']);
+      } else if (result === "win") {
+        balance += wager * 2;
+        sndWin();
+        launchConfetti(['#4ade80', '#22d3ee', '#fbbf24', '#ffffff']);
+      } else if (result === "push") {
+        balance += wager;
+      } else {
+        if (!lastBust) sndLose();
+      }
+
+      renderHands();
+      updateControls();
+
+      if (balance < 5) {
+        setStatus(msg + " ｜ 余额不足，点「新局」重置为 100", cls);
+      } else {
+        setStatus(msg, cls);
+      }
+    }
+
+    // Bet controls
+    btnBetMinus.addEventListener("click", function () {
+      if (phase !== "bet" && phase !== "done") return;
+      bet = Math.max(5, bet - 5);
+      updateControls();
+    });
+    btnBetPlus.addEventListener("click", function () {
+      if (phase !== "bet" && phase !== "done") return;
+      bet = Math.min(balance, bet + 5);
+      updateControls();
+    });
+
+    // Action buttons
+    btnHit.addEventListener("click", hit);
+    btnStand.addEventListener("click", stand);
+    btnDouble.addEventListener("click", doubleDown);
+    btnNew.addEventListener("click", startRound);
+
+    // Initial render
+    updateControls();
+    setStatus("点击「新局」开始（下注 " + bet + "）");
+  })();
+  </script>
+</body>
+</html>
