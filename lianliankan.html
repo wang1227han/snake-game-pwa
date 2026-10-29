@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="连连看" />
+  <title>连连看 · Lianliankan</title>
+  <style>
+    :root {
+      --bg-0: #0b1020;
+      --panel: rgba(255, 255, 255, 0.05);
+      --panel-2: rgba(255, 255, 255, 0.08);
+      --panel-border: rgba(255, 255, 255, 0.10);
+      --text-0: #eef2fb;
+      --text-1: #9aa6c4;
+      --accent: #4ade80;
+      --accent-2: #22d3ee;
+      --danger: #f87171;
+      --gold: #fbbf24;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      min-height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      background:
+        radial-gradient(1200px 700px at 50% -12%, #1b2750, transparent 60%),
+        radial-gradient(900px 700px at 110% 110%, #15243f, transparent 55%),
+        var(--bg-0);
+      color: var(--text-0);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      padding: 14px;
+      overflow-x: hidden;
+    }
+    .app { width: 100%; max-width: 500px; }
+
+    /* ===== 开始页 ===== */
+    .start { text-align: center; padding: 6px 4px 12px; animation: fadeUp 0.5s ease; }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+    .start h1 {
+      font-size: 32px; font-weight: 800; letter-spacing: 1px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .start p.sub { margin-top: 8px; color: var(--text-1); font-size: 14px; }
+
+    .section { margin-top: 22px; text-align: left; }
+    .section > .label { font-size: 13px; color: var(--text-1); margin-bottom: 10px; font-weight: 600; letter-spacing: .5px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 10px; }
+    .chip {
+      flex: 1 1 auto; min-width: 60px; text-align: center;
+      padding: 12px 8px; border-radius: 14px; cursor: pointer; user-select: none;
+      background: var(--panel); border: 1px solid var(--panel-border); color: var(--text-0);
+      font-size: 14px; font-weight: 600;
+      transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
+    }
+    .chip:active { transform: scale(0.97); }
+    .chip:hover { border-color: var(--accent); }
+    .chip.active {
+      border-color: transparent;
+      background: linear-gradient(135deg, rgba(74,222,128,0.22), rgba(34,211,238,0.18));
+      box-shadow: 0 0 0 1.5px var(--accent), 0 6px 22px rgba(74,222,128,0.30);
+    }
+    .chip.disabled { opacity: 0.30; pointer-events: none; filter: grayscale(0.7); }
+
+    .theme-preview {
+      margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-start;
+      min-height: 44px;
+    }
+    .theme-preview img {
+      width: 40px; height: 40px; object-fit: contain; border-radius: 10px;
+      background: var(--panel); border: 1px solid var(--panel-border); padding: 3px;
+      animation: pop 0.3s ease backwards;
+    }
+    .theme-preview img:nth-child(2){ animation-delay:.04s }
+    .theme-preview img:nth-child(3){ animation-delay:.08s }
+    .theme-preview img:nth-child(4){ animation-delay:.12s }
+    .theme-preview img:nth-child(5){ animation-delay:.16s }
+    .theme-preview img:nth-child(6){ animation-delay:.20s }
+
+    .btn {
+      display: inline-block; width: 100%; margin-top: 26px; padding: 14px 20px;
+      border-radius: 14px; cursor: pointer; border: none;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      color: #06121f; font-weight: 800; font-size: 16px; letter-spacing: .5px;
+      box-shadow: 0 8px 24px rgba(74,222,128,0.28);
+      transition: transform 0.12s ease, filter 0.12s ease, box-shadow 0.12s ease;
+    }
+    .btn:active { transform: scale(0.97); filter: brightness(1.05); }
+    .btn:hover { box-shadow: 0 10px 30px rgba(34,211,238,0.34); }
+    .start .note { margin-top: 14px; color: var(--danger); font-size: 12px; min-height: 16px; }
+
+    /* ===== 游戏页 ===== */
+    .game { display: none; animation: fadeUp 0.4s ease; }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 8px; }
+    .back-link {
+      display: inline-flex; align-items: center; gap: 4px; padding: 7px 11px;
+      border-radius: 10px; border: 1px solid var(--panel-border); background: var(--panel);
+      color: var(--text-1); font-size: 13px; text-decoration: none;
+      transition: color 0.12s, border-color 0.12s;
+    }
+    .back-link:hover { color: var(--text-0); border-color: var(--accent); }
+    .title { display: flex; align-items: baseline; gap: 8px; }
+    .title h1 { font-size: 18px; font-weight: 700;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .title .sub { font-size: 11px; color: var(--text-1); }
+    .icon-btn {
+      width: 38px; height: 38px; border-radius: 10px; cursor: pointer; flex: none;
+      background: var(--panel); color: var(--text-1); border: 1px solid var(--panel-border);
+      font-size: 16px; display: inline-flex; align-items: center; justify-content: center;
+      transition: all 0.12s ease;
+    }
+    .icon-btn:hover { color: var(--text-0); border-color: var(--accent); }
+    .icon-btn:active { transform: scale(0.94); }
+
+    .hud { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+    .stat { font-size: 13px; color: var(--text-1); }
+    .stat b { color: var(--text-0); font-size: 16px; }
+    .stat.timer { font-variant-numeric: tabular-nums; color: var(--accent-2); font-weight: 700; font-size: 15px; }
+
+    .progress {
+      margin-top: 10px; height: 8px; border-radius: 999px; overflow: hidden;
+      background: rgba(255,255,255,0.07); border: 1px solid var(--panel-border);
+    }
+    .progress > i {
+      display: block; height: 100%; width: 100%; border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition: width 0.35s cubic-bezier(.2,.8,.2,1);
+    }
+
+    .actions { display: flex; gap: 10px; margin-top: 12px; }
+    .btn-ghost {
+      flex: 1; padding: 10px 12px; border-radius: 12px; cursor: pointer;
+      background: var(--panel); color: var(--text-1); border: 1px solid var(--panel-border);
+      font-weight: 600; font-size: 14px; transition: all 0.12s ease;
+    }
+    .btn-ghost:hover { color: var(--text-0); border-color: var(--accent); background: var(--panel-2); }
+    .btn-ghost:active { transform: scale(0.97); }
+    .btn-ghost:disabled { opacity: 0.4; pointer-events: none; }
+
+    .board-wrap { margin-top: 14px; display: flex; justify-content: center; position: relative; }
+    .board {
+      display: grid; gap: 4px; width: 100%;
+      padding: 10px; border-radius: 18px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(0,0,0,0.18));
+      border: 1px solid var(--panel-border);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 30px rgba(0,0,0,0.35);
+    }
+    .tile {
+      position: relative; aspect-ratio: 1 / 1; border-radius: 12px;
+      background: linear-gradient(160deg, rgba(255,255,255,0.10), rgba(255,255,255,0.03));
+      border: 1px solid rgba(255,255,255,0.10);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.28);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; overflow: hidden; user-select: none;
+      transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+    }
+    .tile::after {
+      content: ""; position: absolute; inset: 0; border-radius: inherit;
+      background: radial-gradient(120% 120% at 30% 20%, rgba(255,255,255,0.18), transparent 50%);
+      pointer-events: none;
+    }
+    .tile img { width: 84%; height: 84%; object-fit: contain; pointer-events: none; display: block; position: relative; z-index: 1; }
+    .tile:hover:not(.empty) { transform: translateY(-2px); border-color: rgba(255,255,255,0.22); }
+    .tile.empty { visibility: hidden; pointer-events: none; }
+    .tile.sel {
+      border-color: var(--accent); background: rgba(74,222,128,0.16);
+      box-shadow: 0 0 0 2px var(--accent), 0 0 18px rgba(74,222,128,0.65);
+      animation: selPulse 1s ease-in-out infinite;
+    }
+    @keyframes selPulse {
+      0%,100% { box-shadow: 0 0 0 2px var(--accent), 0 0 14px rgba(74,222,128,0.55); }
+      50% { box-shadow: 0 0 0 3px var(--accent), 0 0 24px rgba(74,222,128,0.9); }
+    }
+    .tile.hint { animation: hintPulse 0.7s ease-in-out infinite; z-index: 2; }
+    @keyframes hintPulse {
+      0%, 100% { box-shadow: 0 0 0 2px var(--accent-2), 0 0 6px rgba(34,211,238,0.4); }
+      50% { box-shadow: 0 0 0 4px var(--accent-2), 0 0 24px rgba(34,211,238,0.95); }
+    }
+    .tile.shake { animation: shake 0.4s ease; }
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      20% { transform: translateX(-5px); } 40% { transform: translateX(5px); }
+      60% { transform: translateX(-4px); } 80% { transform: translateX(4px); }
+    }
+    .tile.pop { animation: pop 0.32s ease forwards; }
+    @keyframes pop {
+      0% { transform: scale(1); opacity: 1; }
+      35% { transform: scale(1.32); opacity: 0.95; box-shadow: 0 0 0 3px #fff, 0 0 26px rgba(255,255,255,0.8); }
+      100% { transform: scale(0.15); opacity: 0; }
+    }
+    .tile.reshuffle { animation: reshuffle 0.42s ease; }
+    @keyframes reshuffle {
+      0% { transform: scale(1) rotate(0); opacity: 1; }
+      45% { transform: scale(0.55) rotate(180deg); opacity: 0.2; }
+      100% { transform: scale(1) rotate(360deg); opacity: 1; }
+    }
+
+    .combo {
+      position: absolute; left: 50%; top: 42%; transform: translate(-50%,-50%) scale(0.6);
+      font-size: 34px; font-weight: 900; color: var(--gold);
+      text-shadow: 0 0 20px rgba(251,191,36,0.85); opacity: 0; pointer-events: none; z-index: 43;
+    }
+    .combo.show { animation: comboPop 0.75s ease forwards; }
+    @keyframes comboPop {
+      0% { opacity: 0; transform: translate(-50%,-50%) scale(0.5) rotate(-8deg); }
+      25% { opacity: 1; transform: translate(-50%,-50%) scale(1.2) rotate(3deg); }
+      100% { opacity: 0; transform: translate(-50%,-95%) scale(1) rotate(0); }
+    }
+
+    /* 提示 toast */
+    .toast {
+      position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%) translateY(10px);
+      background: rgba(10,16,32,0.94); border: 1px solid var(--panel-border);
+      color: var(--text-0); padding: 10px 18px; border-radius: 999px; font-size: 13px;
+      opacity: 0; pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease; z-index: 44;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* 通关覆盖层 */
+    .overlay {
+      position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+      background: rgba(6,10,22,0.80); z-index: 46; backdrop-filter: blur(3px);
+    }
+    .overlay.show { display: flex; animation: fadeUp 0.4s ease; }
+    .overlay .panel {
+      text-align: center; padding: 34px 38px; border-radius: 22px;
+      background: linear-gradient(180deg, var(--panel-2), rgba(0,0,0,0.2));
+      border: 1px solid var(--panel-border); box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      animation: pop 0.4s ease;
+    }
+    .overlay .panel h2 { font-size: 32px; font-weight: 800;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .overlay .panel p { margin-top: 12px; color: var(--text-1); font-size: 15px; }
+    .overlay .panel p b { color: var(--gold); }
+    .overlay .panel .btn { width: auto; margin-top: 22px; padding: 12px 26px; }
+    .overlay .panel .btn-ghost { width: auto; margin-top: 12px; padding: 11px 26px; }
+
+    /* 全屏连线 / 彩带 canvas */
+    #linkCanvas, #confetti { position: fixed; inset: 0; display: none; pointer-events: none; }
+    #linkCanvas { z-index: 42; }
+    #confetti { z-index: 50; }
+
+    @media (max-width: 360px) {
+      .tile { border-radius: 9px; }
+      .board { gap: 3px; padding: 8px; }
+      .start h1 { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- 开始页 -->
+    <div class="start" id="startScreen">
+      <h1>🧩 连连看</h1>
+      <p class="sub">配对消除 · 经典四川麻将式连线</p>
+
+      <div class="section">
+        <div class="label">图标主题</div>
+        <div class="chips" id="themeChips">
+          <div class="chip active" data-theme="混合">混合</div>
+          <div class="chip" data-theme="动物">🐾 动物</div>
+          <div class="chip" data-theme="植物">🌿 植物</div>
+          <div class="chip" data-theme="水果">🍓 水果</div>
+          <div class="chip" data-theme="动画">✨ 动画</div>
+        </div>
+        <div class="theme-preview" id="themePreview"></div>
+      </div>
+
+      <div class="section">
+        <div class="label">难度（对数）</div>
+        <div class="chips" id="diffChips">
+          <div class="chip active" data-pairs="12">简单<br><span style="font-size:11px;color:var(--text-1)">12 对</span></div>
+          <div class="chip" data-pairs="20">普通<br><span style="font-size:11px;color:var(--text-1)">20 对</span></div>
+          <div class="chip" data-pairs="30">困难<br><span style="font-size:11px;color:var(--text-1)">30 对</span></div>
+          <div class="chip" data-pairs="40">地狱<br><span style="font-size:11px;color:var(--text-1)">40 对</span></div>
+        </div>
+      </div>
+
+      <button class="btn" id="startBtn">开始游戏</button>
+      <div class="note" id="startNote"></div>
+    </div>
+
+    <!-- 游戏页 -->
+    <div class="game" id="gameScreen">
+      <div class="header">
+        <a class="back-link" href="index.html" id="backLink">← 大厅</a>
+        <div class="title"><h1>连连看</h1><span class="sub" id="modeTag">混合 · 普通</span></div>
+        <button class="icon-btn" id="btnMute" title="音效">🔊</button>
+      </div>
+
+      <div class="hud">
+        <div class="stat">剩余 <b id="remain">0</b> 对</div>
+        <div class="stat timer">⏱ <span id="timer">00:00</span></div>
+      </div>
+      <div class="progress"><i id="progressFill"></i></div>
+
+      <div class="actions">
+        <button class="btn-ghost" id="btnShuffle">🔀 重排</button>
+        <button class="btn-ghost" id="btnHint">💡 提示</button>
+      </div>
+
+      <div class="board-wrap">
+        <div class="board" id="board"></div>
+        <div class="combo" id="combo"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="overlay" id="winOverlay">
+    <div class="panel">
+      <h2>🎉 通关！</h2>
+      <p>用时 <b id="winTime">00:00</b> · 最高连击 <b id="winCombo">×1</b></p>
+      <button class="btn" id="againBtn">再玩一局</button>
+      <button class="btn-ghost" id="winBackBtn">返回大厅</button>
+    </div>
+  </div>
+
+  <canvas id="linkCanvas"></canvas>
+  <canvas id="confetti"></canvas>
+
+  <script>
+  (function () {
+    "use strict";
+
+    // =====================================================================
+    // 纯逻辑层（无 DOM 依赖，可被 Node 白盒测试 require）
+    // 约定：逻辑网格为 (ROWS+2) × (COLS+2)，外圈 1 格恒为空（0），
+    //       内部 (r,c) ∈ [1..ROWS, 1..COLS] 存放图标 id（>0 占用，0 已消除）。
+    // =====================================================================
+    const ROWS_B = 8;   // 最大棋盘内圈行数（地狱 40 对 = 10 列 × 8 行）
+    const COLS_B = 10;  // 最大棋盘内圈列数
+
+    function shuffle(a) {
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = a[i]; a[i] = a[j]; a[j] = t;
+      }
+      return a;
+    }
+
+    function inGrid(R, C, r, c) { return r >= 0 && r < R && c >= 0 && c < C; }
+
+    /**
+     * 求连通路径：两点是否能用「横/竖线段、最多 2 个拐角」的路径连通。
+     * 若可连，返回该路径经过的全部格子坐标 [[r,c],...]（含起终点）；否则 null。
+     * 路径只能穿过当前为空（grid==0）的格子，以及终点本身。
+     */
+    function findPath(grid, r1, c1, r2, c2) {
+      const R = grid.length, C = grid[0].length;
+      if (r1 === r2 && c1 === c2) return null;
+      if (grid[r1][c1] === 0 || grid[r2][c2] === 0) return null;
+      const DIRS = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+      const INF = Infinity;
+      const visited = [];
+      for (let r = 0; r < R; r++) {
+        const row = [];
+        for (let c = 0; c < C; c++) row.push([INF, INF, INF, INF]);
+        visited.push(row);
+      }
+      const parent = {}; // "r,c,d" -> {pr,pc,pd}
+      const queue = [];
+      for (let d = 0; d < 4; d++) {
+        const nr = r1 + DIRS[d][0], nc = c1 + DIRS[d][1];
+        if (!inGrid(R, C, nr, nc)) continue;
+        const isDest = (nr === r2 && nc === c2);
+        if (grid[nr][nc] === 0 || isDest) {
+          if (visited[nr][nc][d] > 0) {
+            visited[nr][nc][d] = 0;
+            parent[nr + "," + nc + "," + d] = { pr: r1, pc: c1, pd: -1 };
+            queue.push([nr, nc, d, 0]);
+          }
+        }
+      }
+      while (queue.length) {
+        const [r, c, dir, turns] = queue.shift();
+        if (r === r2 && c === c2) return reconstruct(parent, r, c, dir);
+        for (let nd = 0; nd < 4; nd++) {
+          const newTurns = turns + (nd === dir ? 0 : 1);
+          if (newTurns > 2) continue;
+          const nr = r + DIRS[nd][0], nc = c + DIRS[nd][1];
+          if (!inGrid(R, C, nr, nc)) continue;
+          const isDest = (nr === r2 && nc === c2);
+          if (grid[nr][nc] !== 0 && !isDest) continue;
+          if (visited[nr][nc][nd] > newTurns) {
+            visited[nr][nc][nd] = newTurns;
+            parent[nr + "," + nc + "," + nd] = { pr: r, pc: c, pd: dir };
+            queue.push([nr, nc, nd, newTurns]);
+          }
+        }
+      }
+      return null;
+    }
+
+    function reconstruct(parent, r, c, d) {
+      const path = [];
+      let cr = r, cc = c, cd = d;
+      while (true) {
+        path.push([cr, cc]);
+        const p = parent[cr + "," + cc + "," + cd];
+        if (!p) break;
+        cr = p.pr; cc = p.pc; cd = p.pd;
+        if (cd === -1) { path.push([cr, cc]); break; }
+      }
+      path.reverse();
+      return path;
+    }
+
+    /** 连通判定（可由 findPath 推导，保持与历史 QA 用例一致） */
+    function canConnect(grid, r1, c1, r2, c2) {
+      return findPath(grid, r1, c1, r2, c2) !== null;
+    }
+
+    /**
+     * 扫描当前棋盘，返回任意一组「图标相同且可连通」的坐标对。
+     * @returns {[[number,number],[number,number]]|null}
+     */
+    function findAnyPair(grid, rows, cols) {
+      const byId = {};
+      for (let r = 1; r <= rows; r++) {
+        for (let c = 1; c <= cols; c++) {
+          const v = grid[r][c];
+          if (v > 0) { (byId[v] || (byId[v] = [])).push([r, c]); }
+        }
+      }
+      for (const id in byId) {
+        const cells = byId[id];
+        for (let i = 0; i < cells.length; i++) {
+          for (let j = i + 1; j < cells.length; j++) {
+            if (canConnect(grid, cells[i][0], cells[i][1], cells[j][0], cells[j][1])) {
+              return [cells[i], cells[j]];
+            }
+          }
+        }
+      }
+      return null;
+    }
+
+    function makeBoardPairs(pool, pairCount) {
+      const chosen = shuffle(pool.slice()).slice(0, pairCount);
+      const tiles = [];
+      for (const p of chosen) { tiles.push(p); tiles.push(p); }
+      return shuffle(tiles);
+    }
+
+    function shuffleRemaining(grid, rows, cols) {
+      const cells = [];
+      for (let r = 1; r <= rows; r++)
+        for (let c = 1; c <= cols; c++)
+          if (grid[r][c] > 0) cells.push([r, c]);
+      if (cells.length === 0) return false;
+      const ids = cells.map(([r, c]) => grid[r][c]);
+      const MAX_TRIES = 120;
+      for (let t = 0; t < MAX_TRIES; t++) {
+        shuffle(ids);
+        for (let k = 0; k < cells.length; k++) grid[cells[k][0]][cells[k][1]] = ids[k];
+        if (findAnyPair(grid, rows, cols)) return true;
+      }
+      return false;
+    }
+
+    // =====================================================================
+    // 浏览器 UI / 游戏运行层（仅在存在 document 时执行）
+    // =====================================================================
+    if (typeof document !== "undefined") {
+      const ASSET_BASE = "lianliankan-assets";
+      const LAYOUT = { 12: [6, 4], 20: [8, 5], 30: [10, 6], 40: [10, 8] };
+      const DIFF_NAME = { 12: "简单", 20: "普通", 30: "困难", 40: "地狱" };
+      const SINGLE_MAX = 20;
+      const SINGLE_DIR = { 动物: "animal", 植物: "plant", 水果: "fruit", 动画: "anim" };
+
+      function pad2(n) { return String(n).padStart(2, "0"); }
+      function poolFor(theme) {
+        if (theme === "混合") {
+          const out = [];
+          for (const dir of ["animal", "plant", "fruit", "anim"])
+            for (let i = 1; i <= 20; i++)
+              out.push(ASSET_BASE + "/" + dir + "/" + dir + "_" + pad2(i) + ".png");
+          return out;
+        }
+        const dir = SINGLE_DIR[theme];
+        const out = [];
+        for (let i = 1; i <= 20; i++)
+          out.push(ASSET_BASE + "/" + dir + "/" + dir + "_" + pad2(i) + ".png");
+        return out;
+      }
+
+      const startScreen = document.getElementById("startScreen");
+      const gameScreen = document.getElementById("gameScreen");
+      const themeChips = document.getElementById("themeChips");
+      const diffChips = document.getElementById("diffChips");
+      const themePreview = document.getElementById("themePreview");
+      const startBtn = document.getElementById("startBtn");
+      const startNote = document.getElementById("startNote");
+      const boardEl = document.getElementById("board");
+      const remainEl = document.getElementById("remain");
+      const progressFill = document.getElementById("progressFill");
+      const timerEl = document.getElementById("timer");
+      const modeTagEl = document.getElementById("modeTag");
+      const btnShuffle = document.getElementById("btnShuffle");
+      const btnHint = document.getElementById("btnHint");
+      const btnMute = document.getElementById("btnMute");
+      const toastEl = document.getElementById("toast");
+      const winOverlay = document.getElementById("winOverlay");
+      const winTimeEl = document.getElementById("winTime");
+      const winComboEl = document.getElementById("winCombo");
+      const againBtn = document.getElementById("againBtn");
+      const winBackBtn = document.getElementById("winBackBtn");
+      const comboEl = document.getElementById("combo");
+      const linkCanvas = document.getElementById("linkCanvas");
+      const confettiCanvas = document.getElementById("confetti");
+
+      let theme = "混合";
+      let pairs = 12;
+      let rows = 0, cols = 0;
+      let grid = [];
+      let tiles = [];
+      let idToPath = {};
+      let tileEls = [];
+      let imgEls = [];
+      let sel = null;
+      let busy = false;
+      let over = false;
+      let seconds = 0, timerId = null;
+      let toastTimer = null;
+      let totalPairs = 0;
+      let combo = 0, maxCombo = 0, lastMatchAt = 0;
+
+      // ---- 音效（WebAudio，轻量）----
+      let audioCtx = null, muted = false;
+      function ensureAudio() {
+        if (!audioCtx) {
+          try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audioCtx = null; }
+        }
+        if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+      }
+      function tone(freq, dur, type, vol) {
+        if (muted || !audioCtx) return;
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type = type || "sine"; o.frequency.value = freq;
+        o.connect(g); g.connect(audioCtx.destination);
+        const t = audioCtx.currentTime;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(vol || 0.07, t + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.start(t); o.stop(t + dur + 0.02);
+      }
+      function sndSelect() { tone(520, 0.07, "triangle", 0.04); }
+      function sndMatch() { tone(680, 0.12, "sine", 0.08); setTimeout(() => tone(920, 0.14, "sine", 0.06), 55); }
+      function sndBad() { tone(180, 0.16, "sawtooth", 0.05); }
+      function sndShuffle() { tone(300, 0.16, "sawtooth", 0.04); setTimeout(() => tone(420, 0.14, "sawtooth", 0.03), 70); }
+      function sndWin() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.26, "sine", 0.08), i * 120)); }
+
+      function showToast(msg) {
+        toastEl.textContent = msg;
+        toastEl.classList.add("show");
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1600);
+      }
+
+      function fmtTime(s) {
+        const m = Math.floor(s / 60), ss = s % 60;
+        return pad2(m) + ":" + pad2(ss);
+      }
+
+      function countRemaining() {
+        let n = 0;
+        for (let r = 1; r <= rows; r++)
+          for (let c = 1; c <= cols; c++)
+            if (grid[r][c] > 0) n++;
+        return n / 2;
+      }
+      function updateProgress(remain) {
+        const pct = totalPairs ? Math.max(0, Math.min(100, (remain / totalPairs) * 100)) : 0;
+        progressFill.style.width = pct + "%";
+      }
+      function showCombo(n) {
+        comboEl.textContent = "连击 ×" + n;
+        comboEl.classList.remove("show");
+        void comboEl.offsetWidth; // 重启动画
+        comboEl.classList.add("show");
+      }
+
+      // ---- 主题预览 ----
+      function renderThemePreview() {
+        themePreview.innerHTML = "";
+        const pool = poolFor(theme);
+        const sample = shuffle(pool.slice()).slice(0, 6);
+        sample.forEach((p) => {
+          const im = document.createElement("img");
+          im.src = p; im.alt = ""; im.loading = "lazy";
+          themePreview.appendChild(im);
+        });
+      }
+
+      // ---- 开始页交互：主题 ----
+      themeChips.addEventListener("click", (e) => {
+        const chip = e.target.closest(".chip");
+        if (!chip || chip.classList.contains("disabled")) return;
+        theme = chip.dataset.theme;
+        themeChips.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
+        chip.classList.add("active");
+        const single = theme !== "混合";
+        diffChips.querySelectorAll(".chip").forEach((c) => {
+          const p = parseInt(c.dataset.pairs, 10);
+          c.classList.toggle("disabled", single && p > SINGLE_MAX);
+        });
+        if (single && pairs > SINGLE_MAX) {
+          pairs = SINGLE_MAX;
+          diffChips.querySelectorAll(".chip").forEach((c) =>
+            c.classList.toggle("active", parseInt(c.dataset.pairs, 10) === pairs));
+        }
+        renderThemePreview();
+      });
+
+      diffChips.addEventListener("click", (e) => {
+        const chip = e.target.closest(".chip");
+        if (!chip || chip.classList.contains("disabled")) return;
+        pairs = parseInt(chip.dataset.pairs, 10);
+        diffChips.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
+        chip.classList.add("active");
+      });
+
+      function preload(paths) {
+        return new Promise((resolve) => {
+          let pending = paths.length;
+          if (pending === 0) return resolve();
+          let settled = false;
+          const done = () => { if (settled) return; pending--; if (pending <= 0) { settled = true; resolve(); } };
+          paths.forEach((p) => {
+            const im = new Image();
+            im.onload = done; im.onerror = done; im.src = p;
+          });
+          setTimeout(() => { if (!settled) { settled = true; resolve(); } }, 2500);
+        });
+      }
+
+      function makeGrid(r, c) {
+        const g = [];
+        for (let i = 0; i < r + 2; i++) g.push(new Array(c + 2).fill(0));
+        return g;
+      }
+
+      async function startGame() {
+        ensureAudio();
+        startNote.textContent = "";
+        const layout = LAYOUT[pairs];
+        cols = layout[0]; rows = layout[1];
+        const pool = poolFor(theme);
+        const flat = makeBoardPairs(pool, pairs);
+
+        idToPath = {};
+        let nextId = 1;
+        for (const p of flat) if (!(p in idToPath)) idToPath[p] = nextId++;
+
+        grid = makeGrid(rows, cols);
+        tiles = [];
+        for (let i = 0; i < rows; i++) {
+          const tRow = [];
+          for (let j = 0; j < cols; j++) {
+            const path = flat[i * cols + j];
+            tRow.push(path);
+            grid[i + 1][j + 1] = idToPath[path];
+          }
+          tiles.push(tRow);
+        }
+
+        const used = [];
+        for (const p in idToPath) used.push(p);
+        await preload(used);
+
+        totalPairs = pairs; combo = 0; maxCombo = 0; lastMatchAt = 0;
+        renderBoard();
+        sel = null; busy = false; over = false; seconds = 0;
+        const rem = countRemaining();
+        remainEl.textContent = rem; updateProgress(rem);
+        timerEl.textContent = "00:00";
+        modeTagEl.textContent = (theme === "混合" ? "混合" : theme) + " · " + DIFF_NAME[pairs];
+        startScreen.style.display = "none";
+        gameScreen.style.display = "block";
+        startTimer();
+      }
+
+      function renderBoard() {
+        boardEl.innerHTML = "";
+        boardEl.style.gridTemplateColumns = "repeat(" + cols + ", 1fr)";
+        boardEl.style.maxWidth = Math.min(480, cols * 56) + "px";
+        tileEls = []; imgEls = [];
+        for (let i = 0; i < rows; i++) {
+          const teRow = [], imRow = [];
+          for (let j = 0; j < cols; j++) {
+            const tile = document.createElement("div");
+            tile.className = "tile" + (tiles[i][j] == null ? " empty" : "");
+            tile.dataset.i = i; tile.dataset.j = j;
+            const img = document.createElement("img");
+            if (tiles[i][j] != null) img.src = tiles[i][j];
+            tile.appendChild(img);
+            boardEl.appendChild(tile);
+            teRow.push(tile); imRow.push(img);
+          }
+          tileEls.push(teRow); imgEls.push(imRow);
+        }
+      }
+
+      function syncTiles(animateShuffle) {
+        for (let i = 0; i < rows; i++) {
+          for (let j = 0; j < cols; j++) {
+            const v = grid[i + 1][j + 1];
+            const tile = tileEls[i][j];
+            if (v > 0) {
+              const path = idToPath[v];
+              tiles[i][j] = path;
+              tile.classList.remove("empty", "sel", "hint", "pop");
+              if (imgEls[i][j].src.indexOf(path) === -1) imgEls[i][j].src = path;
+              if (animateShuffle) { tile.classList.add("reshuffle"); setTimeout(() => tile.classList.remove("reshuffle"), 420); }
+            } else {
+              tiles[i][j] = null;
+              tile.classList.add("empty");
+              tile.classList.remove("sel", "hint", "pop");
+            }
+          }
+        }
+      }
+
+      function startTimer() {
+        if (timerId) clearInterval(timerId);
+        timerId = setInterval(() => {
+          if (over) return;
+          seconds++; timerEl.textContent = fmtTime(seconds);
+        }, 1000);
+      }
+      function stopTimer() { if (timerId) { clearInterval(timerId); timerId = null; } }
+
+      function clearSelection() {
+        if (sel) { tileEls[sel.i][sel.j].classList.remove("sel"); sel = null; }
+      }
+
+      // ---- 连线轨迹绘制 ----
+      function stepX() {
+        if (cols > 1) {
+          const a = tileEls[0][0].getBoundingClientRect(), b = tileEls[0][1].getBoundingClientRect();
+          return (b.left + b.width / 2) - (a.left + a.width / 2);
+        }
+        return stepY();
+      }
+      function stepY() {
+        if (rows > 1) {
+          const a = tileEls[0][0].getBoundingClientRect(), b = tileEls[1][0].getBoundingClientRect();
+          return (b.top + b.height / 2) - (a.top + a.height / 2);
+        }
+        return stepX();
+      }
+      function cellCenter(r, c) {
+        if (r >= 1 && r <= rows && c >= 1 && c <= cols) {
+          const b = tileEls[r - 1][c - 1].getBoundingClientRect();
+          return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+        }
+        let ref = null, dr = 0, dc = 0;
+        const inC = c >= 1 && c <= cols, inR = r >= 1 && r <= rows;
+        if (r === 0 && inC) { ref = tileEls[0][c - 1].getBoundingClientRect(); dr = -1; }
+        else if (r === rows + 1 && inC) { ref = tileEls[rows - 1][c - 1].getBoundingClientRect(); dr = 1; }
+        else if (c === 0 && inR) { ref = tileEls[r - 1][0].getBoundingClientRect(); dc = -1; }
+        else if (c === cols + 1 && inR) { ref = tileEls[r - 1][cols - 1].getBoundingClientRect(); dc = 1; }
+        else if (r === 0 && c === 0) { ref = tileEls[0][0].getBoundingClientRect(); dr = -1; dc = -1; }
+        else if (r === 0 && c === cols + 1) { ref = tileEls[0][cols - 1].getBoundingClientRect(); dr = -1; dc = 1; }
+        else if (r === rows + 1 && c === 0) { ref = tileEls[rows - 1][0].getBoundingClientRect(); dr = 1; dc = -1; }
+        else if (r === rows + 1 && c === cols + 1) { ref = tileEls[rows - 1][cols - 1].getBoundingClientRect(); dr = 1; dc = 1; }
+        return { x: ref.left + ref.width / 2 + dc * stepX(), y: ref.top + ref.height / 2 + dr * stepY() };
+      }
+      function drawLink(path) {
+        const ctx = linkCanvas.getContext("2d");
+        linkCanvas.width = window.innerWidth; linkCanvas.height = window.innerHeight;
+        linkCanvas.style.display = "block";
+        const pts = path.map(([r, c]) => cellCenter(r, c));
+        const start = performance.now();
+        function frame(t) {
+          const p = (t - start) / 380;
+          if (p >= 1) { ctx.clearRect(0, 0, linkCanvas.width, linkCanvas.height); linkCanvas.style.display = "none"; return; }
+          ctx.clearRect(0, 0, linkCanvas.width, linkCanvas.height);
+          ctx.save();
+          ctx.globalAlpha = 1 - p;
+          ctx.strokeStyle = "#4ade80"; ctx.lineWidth = 4; ctx.lineCap = "round"; ctx.lineJoin = "round";
+          ctx.shadowColor = "rgba(74,222,128,0.9)"; ctx.shadowBlur = 12;
+          ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+          for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+          ctx.stroke(); ctx.restore();
+          requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+      }
+
+      function onTileClick(i, j) {
+        if (busy || over) return;
+        ensureAudio();
+        if (tiles[i][j] == null) return;
+        if (sel && sel.i === i && sel.j === j) { clearSelection(); return; }
+        if (!sel) { sel = { i, j }; tileEls[i][j].classList.add("sel"); sndSelect(); return; }
+
+        const a = sel, b = { i, j };
+        const idA = grid[a.i + 1][a.j + 1], idB = grid[b.i + 1][b.j + 1];
+        const path = (idA === idB) ? findPath(grid, a.i + 1, a.j + 1, b.i + 1, b.j + 1) : null;
+        if (path) {
+          eliminate(a, b, path);
+        } else {
+          const t = tileEls[b.i][b.j];
+          t.classList.add("shake"); setTimeout(() => t.classList.remove("shake"), 400);
+          sndBad();
+          clearSelection();
+        }
+      }
+
+      function eliminate(a, b, path) {
+        busy = true;
+        clearSelection();
+        if (path) drawLink(path);
+        const ta = tileEls[a.i][a.j], tb = tileEls[b.i][b.j];
+        ta.classList.add("pop"); tb.classList.add("pop");
+        sndMatch();
+        grid[a.i + 1][a.j + 1] = 0; grid[b.i + 1][b.j + 1] = 0;
+        tiles[a.i][a.j] = null; tiles[b.i][b.j] = null;
+
+        // 连击
+        const now = performance.now();
+        combo = (now - lastMatchAt < 3000) ? combo + 1 : 1;
+        lastMatchAt = now;
+        maxCombo = Math.max(maxCombo, combo);
+        if (combo >= 2) setTimeout(() => showCombo(combo), 120);
+
+        setTimeout(() => {
+          ta.classList.add("empty"); tb.classList.add("empty");
+          ta.classList.remove("pop"); tb.classList.remove("pop");
+          busy = false;
+          afterEliminate();
+        }, 320);
+      }
+
+      function afterEliminate() {
+        const remaining = countRemaining();
+        remainEl.textContent = remaining;
+        updateProgress(remaining);
+        if (remaining === 0) { win(); return; }
+        if (!findAnyPair(grid, rows, cols)) {
+          const ok = shuffleRemaining(grid, rows, cols);
+          syncTiles(true);
+          showToast(ok ? "已自动重排" : "暂时无解，仍可继续");
+        }
+      }
+
+      function doHint() {
+        if (busy || over) return;
+        const pair = findAnyPair(grid, rows, cols);
+        if (!pair) {
+          const ok = shuffleRemaining(grid, rows, cols);
+          syncTiles(true);
+          showToast(ok ? "已重排，试试看" : "暂时无解");
+          return;
+        }
+        const [a, b] = pair;
+        pulse(a[0] - 1, a[1] - 1); pulse(b[0] - 1, b[1] - 1);
+      }
+      function pulse(i, j) {
+        const t = tileEls[i][j];
+        if (!t) return;
+        t.classList.add("hint");
+        setTimeout(() => t.classList.remove("hint"), 1500);
+      }
+
+      function doShuffle() {
+        if (busy || over) return;
+        clearSelection();
+        const ok = shuffleRemaining(grid, rows, cols);
+        syncTiles(true);
+        sndShuffle();
+        showToast(ok ? "已重排" : "重排后暂时无解");
+      }
+
+      function win() {
+        over = true; stopTimer(); clearSelection();
+        winTimeEl.textContent = fmtTime(seconds);
+        winComboEl.textContent = "×" + Math.max(1, maxCombo);
+        winOverlay.classList.add("show");
+        sndWin();
+        celebrate();
+      }
+      function backToStart() {
+        stopTimer();
+        over = false; busy = false; sel = null; combo = 0;
+        winOverlay.classList.remove("show");
+        hideConfetti();
+        linkCanvas.style.display = "none";
+        gameScreen.style.display = "none";
+        startScreen.style.display = "block";
+      }
+
+      // ---- 轻量彩带 ----
+      let confettiRaf = null;
+      function celebrate() {
+        const cv = confettiCanvas;
+        cv.width = window.innerWidth; cv.height = window.innerHeight;
+        cv.style.display = "block";
+        const ctx = cv.getContext("2d");
+        const colors = ["#4ade80", "#22d3ee", "#fbbf24", "#f87171", "#a5b4fc", "#f472b6"];
+        const parts = [];
+        for (let i = 0; i < 130; i++) {
+          parts.push({
+            x: cv.width / 2, y: cv.height * 0.30,
+            vx: (Math.random() - 0.5) * 13, vy: Math.random() * -12 - 4,
+            size: 5 + Math.random() * 6, color: colors[i % colors.length],
+            rot: Math.random() * 6, vr: (Math.random() - 0.5) * 0.4, life: 1
+          });
+        }
+        const start = performance.now();
+        function frame(t) {
+          const dt = (t - start) / 1000;
+          ctx.clearRect(0, 0, cv.width, cv.height);
+          for (const p of parts) {
+            p.vy += 0.30; p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.life -= 0.010;
+            if (p.life <= 0) continue;
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, p.life);
+            ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+            ctx.fillStyle = p.color;
+            ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+            ctx.restore();
+          }
+          if (dt < 1.8) { confettiRaf = requestAnimationFrame(frame); }
+          else { hideConfetti(); }
+        }
+        confettiRaf = requestAnimationFrame(frame);
+      }
+      function hideConfetti() {
+        if (confettiRaf) { cancelAnimationFrame(confettiRaf); confettiRaf = null; }
+        const cv = confettiCanvas;
+        cv.style.display = "none";
+        const ctx = cv.getContext("2d");
+        ctx.clearRect(0, 0, cv.width, cv.height);
+      }
+
+      // ---- 事件绑定 ----
+      boardEl.addEventListener("click", (e) => {
+        const tile = e.target.closest(".tile");
+        if (!tile) return;
+        onTileClick(parseInt(tile.dataset.i, 10), parseInt(tile.dataset.j, 10));
+      });
+      startBtn.addEventListener("click", () => { startGame(); });
+      btnShuffle.addEventListener("click", doShuffle);
+      btnHint.addEventListener("click", doHint);
+      btnMute.addEventListener("click", () => {
+        muted = !muted;
+        btnMute.textContent = muted ? "🔇" : "🔊";
+        if (!muted) ensureAudio();
+      });
+      againBtn.addEventListener("click", backToStart);
+      winBackBtn.addEventListener("click", () => { window.location.href = "index.html"; });
+      window.addEventListener("resize", hideConfetti);
+      renderThemePreview();
+    }
+
+    // =====================================================================
+    // 白盒测试守卫：Node require 时导出纯逻辑函数
+    // =====================================================================
+    if (typeof module !== "undefined" && module.exports) {
+      module.exports = {
+        ROWS_B, COLS_B,
+        shuffle, inGrid,
+        findPath, canConnect, findAnyPair, makeBoardPairs, shuffleRemaining
+      };
+    }
+  })();
+  </script>
+</body>
+</html>
