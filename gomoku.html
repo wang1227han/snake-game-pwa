@@ -94,6 +94,55 @@
 
     .status.scramble { color: var(--accent-2); animation: blink 0.8s infinite; }
     @keyframes blink { 50% { opacity: 0.45; } }
+
+    /* AI 思考指示 */
+    .ai-thinking {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      display: none; flex-direction: column; align-items: center; gap: 10px;
+      padding: 14px 18px; border-radius: 14px;
+      background: rgba(11, 16, 32, 0.72); border: 1px solid var(--panel-border);
+      backdrop-filter: blur(4px); color: var(--text-0); font-size: 13px; font-weight: 600;
+      pointer-events: none; z-index: 5;
+    }
+    .ai-thinking.show { display: flex; animation: aiFade .18s ease; }
+    .ai-txt { letter-spacing: 1px; }
+    .spinner {
+      width: 26px; height: 26px; border-radius: 50%;
+      border: 3px solid rgba(255, 255, 255, 0.18); border-top-color: var(--accent);
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes aiFade { from { opacity: 0; transform: translate(-50%, -50%) scale(.9); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+
+    /* 胜负弹窗 */
+    .modal-backdrop {
+      position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+      background: rgba(5, 8, 18, 0.6); backdrop-filter: blur(6px); z-index: 50; padding: 20px;
+    }
+    .modal-backdrop.show { display: flex; animation: fadeBg .2s ease; }
+    @keyframes fadeBg { from { opacity: 0; } to { opacity: 1; } }
+    .modal-card {
+      width: 100%; max-width: 320px; text-align: center;
+      background: linear-gradient(160deg, rgba(30, 40, 70, 0.96), rgba(11, 16, 32, 0.96));
+      border: 1px solid var(--panel-border); border-radius: 20px; padding: 28px 24px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+      transform: translateY(12px) scale(.92); opacity: 0;
+    }
+    .modal-backdrop.show .modal-card { animation: popCard .32s cubic-bezier(.2, .9, .3, 1.3) forwards; }
+    @keyframes popCard { to { transform: translateY(0) scale(1); opacity: 1; } }
+    .result-emoji { font-size: 56px; line-height: 1; margin-bottom: 8px; }
+    .result-title { font-size: 24px; font-weight: 800; margin-bottom: 6px; }
+    .result-title.win { color: var(--accent); }
+    .result-title.lose { color: var(--danger); }
+    .result-title.draw { color: var(--accent-2); }
+    .result-msg { font-size: 14px; color: var(--text-1); margin-bottom: 20px; line-height: 1.6; }
+    .modal-actions { display: flex; gap: 10px; }
+    .modal-actions a, .modal-actions button {
+      flex: 1; padding: 12px; border-radius: 12px; cursor: pointer; font-weight: 700; font-size: 15px;
+      text-decoration: none; border: none;
+    }
+    .btn-primary { background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #06121f; }
+    .btn-ghost { background: var(--panel); color: var(--text-0); border: 1px solid var(--panel-border) !important; }
   </style>
 </head>
 <body>
@@ -102,6 +151,7 @@
       <a class="back-link" href="index.html">← 大厅</a>
       <div class="title"><h1>五子棋</h1><span class="sub">GOMOKU</span></div>
       <button class="sound-toggle" id="btn-sound" title="音效开关">🔊</button>
+      <a class="sound-toggle" href="help.html#gomoku" title="玩法说明">❓</a>
     </div>
 
     <div class="diff" id="diff">
@@ -123,12 +173,25 @@
     <div class="board-wrap">
       <canvas id="board"></canvas>
       <canvas id="fx"></canvas>
+      <div class="ai-thinking" id="aiThinking"><span class="spinner"></span><span class="ai-txt">AI 思考中…</span></div>
     </div>
 
     <div class="footer">
       <button class="btn" id="restart">新对局</button>
     </div>
     <div class="hint" id="hint">黑棋先手 · 五子连珠即胜 · 困难/吊炸天/地狱 黑棋受「禁手」限制 · 地狱每 20 手重组棋盘</div>
+  </div>
+
+  <div class="modal-backdrop" id="resultModal">
+    <div class="modal-card">
+      <div class="result-emoji" id="resultEmoji">🎉</div>
+      <div class="result-title" id="resultTitle">你赢了！</div>
+      <div class="result-msg" id="resultMsg"></div>
+      <div class="modal-actions">
+        <a class="btn-ghost" href="index.html">返回大厅</a>
+        <button class="btn-primary" id="btnAgain">再来一局</button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -144,6 +207,11 @@
     let lastMove = null;      // {r,c}
     let level = "medium";
     let thinking = false;
+
+    // 动画：落子弹出 + 末手脉冲
+    let popMap = {};          // "r,c" -> 落子时间戳
+    let lastMoveTime = 0;     // 最近一手时间（用于脉冲呼吸）
+    let animRAF = null;       // 动画循环句柄
 
     // 执棋方：玩家与 AI 各执一色（黑恒先手）
     let humanColor = BLACK;
@@ -497,6 +565,24 @@
       return { r, c };
     }
 
+    // ---------- 动画驱动 ----------
+    function easeOutBack(t) {
+      const c1 = 1.70158, c3 = c1 + 1;
+      return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+    }
+    function recordPop(r, c) {
+      popMap[r + "," + c] = Date.now();
+      lastMoveTime = Date.now();
+      scheduleAnim();
+    }
+    function scheduleAnim() { if (!animRAF) animRAF = requestAnimationFrame(animLoop); }
+    function animLoop() {
+      draw();
+      const now = Date.now();
+      const active = scrambleActive() || (lastMove && now - lastMoveTime < 1200) || Object.keys(popMap).length > 0;
+      animRAF = active ? requestAnimationFrame(animLoop) : null;
+    }
+
     // ---------- 渲染 ----------
     const canvas = document.getElementById("board");
     const ctx = canvas.getContext("2d");
@@ -550,23 +636,35 @@
         for (let b = 0; b < stars.length; b++) {
           ctx.beginPath(); ctx.arc(px(stars[a]), px(stars[b]), 3, 0, Math.PI * 2); ctx.fill();
         }
-      // 棋子
+      // 棋子（落子带弹出动画）
       const r = step * 0.42;
+      const now = Date.now();
       for (let i = 0; i < GRID; i++)
         for (let j = 0; j < GRID; j++) {
           if (board[i][j] === EMPTY) continue;
+          const key = i + "," + j;
+          let scale = 1;
+          if (popMap[key] !== undefined) {
+            const t = (now - popMap[key]) / 200;
+            if (t < 1) scale = easeOutBack(t); else delete popMap[key];
+          }
+          const rr = r * scale;
           const x = px(j), y = px(i);
-          const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
+          const g = ctx.createRadialGradient(x - rr * 0.3, y - rr * 0.3, rr * 0.1, x, y, rr);
           if (board[i][j] === BLACK) { g.addColorStop(0, "#6b7280"); g.addColorStop(1, "#0b0b0b"); }
           else { g.addColorStop(0, "#ffffff"); g.addColorStop(1, "#cbd5e1"); }
           ctx.fillStyle = g;
-          ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.fill();
         }
-      // 最后一手标记
+      // 最后一手标记（带脉冲呼吸环）
       if (lastMove) {
-        ctx.strokeStyle = "#fbbf24";
+        const pulse = lastMoveTime ? (1 + 0.22 * Math.sin((now - lastMoveTime) / 130)) : 1;
+        ctx.strokeStyle = "rgba(251,191,36,0.9)";
         ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(px(lastMove.c), px(lastMove.r), r * 0.35, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = "rgba(251,191,36,0.35)";
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(px(lastMove.c), px(lastMove.r), r * 0.55 * pulse, 0, Math.PI * 2); ctx.stroke();
       }
       // 落子悬浮预览（仅轮到玩家且交叉点为空时）
       if (hoverCell && board[hoverCell.r][hoverCell.c] === EMPTY &&
@@ -615,13 +713,10 @@
       ctx.restore();
     }
 
-    function animateScramble() {
-      draw();
-      if (scrambleActive()) requestAnimationFrame(animateScramble);
-    }
-
     // ---------- 交互 ----------
     const statusEl = document.getElementById("status");
+    const aiThinkingEl = document.getElementById("aiThinking");
+    const resultModal = document.getElementById("resultModal");
 
     function setStatus(text, cls) {
       statusEl.textContent = text;
@@ -640,6 +735,7 @@
         if (fb) { board[r][c] = BLACK; lastMove = { r, c }; draw(); sndForbidden(); endGame(false, "禁手判负"); return; }
       }
       board[r][c] = humanColor; lastMove = { r, c };
+      recordPop(r, c);
       draw(); sndPlace();
       if (checkWinAt(board, r, c, humanColor)) { endGame(true); return; }
       if (isBoardFull()) { endGame(null); return; }
@@ -649,9 +745,10 @@
 
     function aiTurn() {
       const m = chooseAIMove();
-      thinking = false;
+      stopAiThinking();
       if (!m) { endGame(null); return; }
       board[m[0]][m[1]] = aiColor; lastMove = { r: m[0], c: m[1] };
+      recordPop(m[0], m[1]);
       draw(); sndPlace();
       if (checkWinAt(board, m[0], m[1], aiColor)) { endGame(false); return; }
       if (isBoardFull()) { endGame(null); return; }
@@ -669,13 +766,24 @@
       switchTurn();
     }
 
+    function aiDelay() {
+      return ({ easy: 450, medium: 550, hard: 700, insane: 800, hell: 800 })[level] || 550;
+    }
+    function startAiThinking() {
+      thinking = true;
+      setStatus("AI 思考中…");
+      if (aiThinkingEl) aiThinkingEl.classList.add("show");
+      setTimeout(function () { aiTurn(); }, aiDelay());
+    }
+    function stopAiThinking() {
+      thinking = false;
+      if (aiThinkingEl) aiThinkingEl.classList.remove("show");
+    }
     function switchTurn() {
       if (current === aiColor) {
-        setStatus("AI 思考中…");
-        thinking = true;
-        setTimeout(aiTurn, 30);
+        startAiThinking();
       } else {
-        thinking = false;
+        stopAiThinking();
         setStatus(current === BLACK ? "轮到你了（黑棋）" : "轮到你了（白棋）");
       }
     }
@@ -786,7 +894,7 @@
       setStatus("⚡ 棋盘重组！", "scramble");
       sndScramble();
       draw();
-      animateScramble();
+      scheduleAnim();
       setTimeout(function () {
         scrambling = false;
         draw();
@@ -806,6 +914,23 @@
       if (win === true) { setStatus("🎉 你赢了！", "win"); sndWin(); launchConfetti(["#4ade80", "#22d3ee", "#fbbf24", "#ffffff"]); }
       else if (win === false) { setStatus(reason ? ("😖 你输了：" + reason) : "😖 你输了，再战一局？", "lose"); sndLose(); launchConfetti(["#f87171", "#fbbf24", "#ffffff"]); }
       else setStatus("🤝 平局", "");
+      setTimeout(function () { showResultModal(win, reason); }, 650);
+    }
+    function hideResultModal() { if (resultModal) resultModal.classList.remove("show"); }
+    function showResultModal(win, reason) {
+      if (!resultModal) return;
+      let emoji, title, cls, msg;
+      if (win === true) { emoji = "🎉"; title = "你赢了！"; cls = "win"; msg = "漂亮！五子连珠，击败了 AI。"; }
+      else if (win === false) {
+        emoji = (reason === "禁手判负") ? "⛔" : "😖";
+        title = "你输了"; cls = "lose";
+        msg = reason ? ("因「" + reason + "」告负，再接再厉！") : "AI 抢先连成五子，再来一局？";
+      } else { emoji = "🤝"; title = "平局"; cls = "draw"; msg = "棋盘已满，势均力敌！"; }
+      document.getElementById("resultEmoji").textContent = emoji;
+      const tEl = document.getElementById("resultTitle");
+      tEl.textContent = title; tEl.className = "result-title " + cls;
+      document.getElementById("resultMsg").textContent = msg;
+      resultModal.classList.add("show");
     }
 
     function getCell(evt) {
@@ -857,6 +982,8 @@
       btnSound.textContent = muted ? "🔇" : "🔊";
       if (!muted) { ac(); }
     });
+    document.getElementById("btnAgain").addEventListener("click", function () { hideResultModal(); newGame(); });
+    if (resultModal) resultModal.addEventListener("click", function (e) { if (e.target === resultModal) hideResultModal(); });
 
     // ---------- 难度 / 执棋方 / 重开 ----------
     const diffEl = document.getElementById("diff");
@@ -892,17 +1019,18 @@
     window.addEventListener("resize", resizeCanvas);
 
     function newGame() {
+      hideResultModal();
       board = [];
       for (let i = 0; i < GRID; i++) { board.push(new Array(GRID).fill(EMPTY)); }
       current = BLACK;            // 黑棋恒先手
       gameOver = false; thinking = false; lastMove = null;
       plyCount = 0; scrambling = false;
+      popMap = {}; lastMoveTime = 0;
       draw();
       if (aiColor === BLACK) {
         // AI 执黑先行
+        startAiThinking();
         setStatus("AI（黑）先行，请稍候…");
-        thinking = true;
-        setTimeout(aiTurn, 300);
       } else {
         setStatus(humanColor === BLACK ? "你执黑先行，点击棋盘落子" : "你执白后手，AI（黑）先行…");
         thinking = false;

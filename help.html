@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>玩法说明 · 小游戏合集</title>
+  <style>
+    :root {
+      --bg-0: #0b1020;
+      --panel: rgba(255, 255, 255, 0.04);
+      --panel-border: rgba(255, 255, 255, 0.08);
+      --text-0: #e8ecf5;
+      --text-1: #9aa6c4;
+      --accent: #4ade80;
+      --accent-2: #22d3ee;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100%; }
+    body {
+      background: radial-gradient(1200px 800px at 50% -10%, #1a2440, var(--bg-0));
+      color: var(--text-0);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      padding: 16px;
+    }
+    .help { max-width: 540px; margin: 0 auto; }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .back-link {
+      display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px;
+      border-radius: 10px; border: 1px solid var(--panel-border); background: var(--panel);
+      color: var(--text-1); font-size: 13px; text-decoration: none;
+    }
+    .back-link:hover { color: var(--text-0); }
+    .title {
+      font-size: 18px; font-weight: 800;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .lead { color: var(--text-1); font-size: 13px; margin: 6px 0 16px; line-height: 1.7; }
+    .game {
+      background: var(--panel); border: 1px solid var(--panel-border);
+      border-radius: 16px; padding: 18px; margin-bottom: 14px; scroll-margin-top: 14px;
+    }
+    .game h2 { font-size: 17px; display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .game .tag { font-size: 11px; color: var(--text-1); font-weight: 500; }
+    .game ul { margin: 10px 0 0; padding-left: 18px; }
+    .game li { font-size: 13.5px; line-height: 1.75; color: var(--text-0); }
+    .game li b { color: var(--accent); }
+    .tip {
+      margin-top: 12px; padding: 10px 12px; border-radius: 10px;
+      background: rgba(34, 211, 238, 0.08); border: 1px solid rgba(34, 211, 238, 0.18);
+      font-size: 12.5px; color: var(--text-1); line-height: 1.7;
+    }
+    .tip b { color: var(--accent-2); }
+    .top {
+      display: block; text-align: center; color: var(--text-1); font-size: 12px;
+      text-decoration: none; margin: 6px 0 24px;
+    }
+    .top:hover { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="help" id="top">
+    <div class="header">
+      <a class="back-link" href="index.html">← 大厅</a>
+      <div class="title">📖 玩法说明</div>
+      <span style="width:54px"></span>
+    </div>
+    <p class="lead">每款游戏的操作与技巧都在下面 👇 大厅里点任意游戏的「❓」也能直达对应说明。所有游戏均为单文件、可离线，添加到主屏幕即可当 APP 使用。</p>
+
+    <section class="game" id="snake">
+      <h2>🐍 贪吃蛇 <span class="tag">5 关卡 · 越玩越快</span></h2>
+      <ul>
+        <li><b>操作：</b>手机端滑动屏幕改变方向；电脑端用 <b>方向键 / WASD</b> 控制。</li>
+        <li><b>目标：</b>吃到食物身体变长、加分；撞到墙壁或自己的身体即结束。</li>
+        <li><b>关卡：</b>共 5 关，每过一关速度提升，并伴随粒子迸发与「+分」飘字反馈。</li>
+      </ul>
+      <div class="tip">💡 转弯时别贴着身体急转，提前留好回旋空间；长蛇身时规划路线更稳。</div>
+    </section>
+
+    <section class="game" id="gomoku">
+      <h2>⚫ 五子棋 <span class="tag">人机对战 · 5 档难度</span></h2>
+      <ul>
+        <li><b>操作：</b>点击（或触摸）棋盘交叉点落子，桌面端移动鼠标有半透明落子预览。</li>
+        <li><b>目标：</b>黑白交替，<b>先连成五子</b>（横 / 竖 / 斜）者获胜。</li>
+        <li><b>难度：</b>简单 / 中等 / 困难 / 吊炸天 / 地狱；困难以上黑棋受「禁手」限制（三三、四四、长连判负）。</li>
+        <li><b>地狱：</b>每 20 手棋盘自动重组并播放旋转特效，保持双方数量公平。</li>
+      </ul>
+      <div class="tip">💡 AI 落子前会有「思考中」提示与间隔，胜负有专属弹窗；执黑先手，可在顶部切换执子与难度。</div>
+    </section>
+
+    <section class="game" id="anqi">
+      <h2>🀄 暗棋 <span class="tag">翻棋定阵营 · 人机对战</span></h2>
+      <ul>
+        <li><b>开局：</b>32 枚棋子背面朝上打乱；先翻任意一枚，其颜色即你的阵营，对手执另一色。</li>
+        <li><b>走子：</b>己方棋子走到相邻（或炮隔一空格）敌子处可吃子，<b>大吃小</b>（将 / 帅最大，兵 / 卒最小）。</li>
+        <li><b>胜负：</b>吃掉对方「将 / 帅」或对方无子可动即获胜。</li>
+      </ul>
+      <div class="tip">💡 先翻中心区域更容易拿到大将；用「炮」隔子吃子是关键翻盘手段。</div>
+    </section>
+
+    <section class="game" id="lianliankan">
+      <h2>🧩 连连看 <span class="tag">配对消除 · 4 主题</span></h2>
+      <ul>
+        <li><b>操作：</b>依次点选两张图案，若可用不超过 <b>2 次转折</b> 的线连接则消除。</li>
+        <li><b>目标：</b>清空全部图案即通关；可选 4 种主题皮肤。</li>
+        <li><b>辅助：</b>无可用连接时棋盘会<b>自动重组</b>并带旋转动画；另有提示、重排按钮与连击加成。</li>
+      </ul>
+      <div class="tip">💡 优先消除被包围的「内部」图案，给边缘留出通路；卡住时善用提示。</div>
+    </section>
+
+    <section class="game" id="blackjack">
+      <h2>🃏 21点 <span class="tag">对战 AI 庄家 · 赌筹码</span></h2>
+      <ul>
+        <li><b>目标：</b>手牌点数尽量接近 <b>21 且不超过</b>；超过（爆牌）即输。</li>
+        <li><b>操作：</b>「要牌」加一张、「停牌」结束、「加倍」下注翻倍（仅首轮）。</li>
+        <li><b>规则：</b>J / Q / K 计 10，A 可 1 或 11；庄家 ≥17 必须停；<b>黑杰克</b>（首两张 A+10）赔率 3:2。</li>
+      </ul>
+      <div class="tip">💡 16 点对庄家明牌 7 以上时通常要牌；注意筹码管理，别一次 all-in。</div>
+    </section>
+
+    <section class="game" id="solitaire">
+      <h2>🂡 纸牌接龙 <span class="tag">Klondike · 七列归位</span></h2>
+      <ul>
+        <li><b>操作：</b>点选式移动（手机友好），整段同花顺可一起拖动；空列只能放 <b>K</b>。</li>
+        <li><b>理牌：</b>七列中红黑交替、点数递减叠放；翻完暗牌自动亮出。</li>
+        <li><b>目标：</b>把 A→K 四种花色依次归位到右上四堆即通关；可用「自动归位」一键收尾。</li>
+      </ul>
+      <div class="tip">💡 优先翻出盖牌、保留空列给 K；把低牌尽早移入序列能解锁更多操作。</div>
+    </section>
+
+    <section class="game" id="memory">
+      <h2>🎴 记忆翻牌 <span class="tag">翻牌配对 · 计时挑战</span></h2>
+      <ul>
+        <li><b>操作：</b>翻开两张牌，相同则保留，不同则自动翻回；全部配对即胜。</li>
+        <li><b>难度：</b>4×4（8 对）轻松，6×6（18 对）硬核。</li>
+        <li><b>计分：</b>记录<b>用时与步数</b>，通关有彩带庆祝。</li>
+      </ul>
+      <div class="tip">💡 翻第一张时默记位置，第二张刻意去配对已知图案；用「步数」逼自己记忆。</div>
+    </section>
+
+    <a class="top" href="#top">↑ 返回顶部</a>
+  </div>
+</body>
+</html>
